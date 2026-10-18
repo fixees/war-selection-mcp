@@ -5290,7 +5290,7 @@
    "name": "buildCost/initCost",
    "path": "",
    "section": "7. Частые операции (проверенные фрагменты)",
-   "text": "⚠️ **Изменение `buildCost/initCost` у нескольких игроков не сработало** [D: Matim, 16.08.2023; 맥스, 03.01.2025; l66b, 21–24.07.2026]. Подтверждённого рабочего примера в Discord нет. l66b использовал `root.build` и `root.scene[0].faction`, а не `root.faction` **[НЕ РЕШЕНО]**.",
+   "text": "Внимание: **Изменение `buildCost/initCost` у нескольких игроков не сработало** [D: Matim, 16.08.2023; 맥스, 03.01.2025; l66b, 21–24.07.2026]. Подтверждённого рабочего примера в Discord нет. l66b использовал `root.build` и `root.scene[0].faction`, а не `root.faction` **[НЕ РЕШЕНО]**.",
    "source": "api-cheatsheet.md (war-selection research, sources in [D: #channel, date] tags)"
   },
   {
@@ -6002,7 +6002,7 @@
    "name": "program",
    "path": "",
    "section": "13. Ауры и теги урона (v3 шпаргалки)",
-   "text": "⚠ Значения `program` (0 = скорость, 4 = разброс/точность, 19 = регенерация, 35 = обзор) — **мой вывод** по совпадению с патчноутами, не официальная документация.",
+   "text": "Внимание: Значения `program` (0 = скорость, 4 = разброс/точность, 19 = регенерация, 35 = обзор) — **мой вывод** по совпадению с патчноутами, не официальная документация.",
    "source": "api-cheatsheet.md (war-selection research, sources in [D: #channel, date] tags)"
   },
   {
@@ -6194,7 +6194,7 @@
    "name": "program 34",
    "path": "",
    "section": "14.3 Исследования и улучшения",
-   "text": "⚠ `program 34` = урон — **вывод** из имён переменных `damageUpgValue`/`upgradeDamagePercent` в том же моде.",
+   "text": "Внимание: `program 34` = урон — **вывод** из имён переменных `damageUpgValue`/`upgradeDamagePercent` в том же моде.",
    "source": "api-cheatsheet.md (war-selection research, sources in [D: #channel, date] tags)"
   },
   {

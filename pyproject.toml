@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = ["mcp>=1.25,<2"]
-authors = [{ name = "Artur Roman (fixees)" }]
+authors = [{ name = "fixees" }]
 keywords = ["mcp", "mcp-server", "war-selection", "modding", "lua", "rts"]
 classifiers = [
   "Programming Language :: Python :: 3",
