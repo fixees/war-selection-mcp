@@ -14,6 +14,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from . import apidump
 from .config import Config
 
 MOD_FILE_RE = re.compile(r"^(?P<id>[A-Za-z0-9]{11})_(?P<ver>\d+)-(?P<hash>[0-9a-fA-F]{16})\.(?P<kind>lua|prm)$")
@@ -100,9 +101,20 @@ def game_info(cfg: Config) -> dict[str, Any]:
         "project_dir": str(proj),
         "project_files": project_files,
         "log_found": logs,
-        "api_index_version": "WSUS tree of game 258.4018 (10.10.2026) + api-cheatsheet v4 + mod cache examples (engine 264)",
-        "note": "Engine version on disk may be newer than the API index; verify names with log(root).",
+        "api_index": _index_status(cfg, engine),
+        "note": ("Bundled index is WSUS v258.4018. Refresh it from the running game: api_dump_script, "
+                 "then import_api_dump."),
     }
+
+
+def _index_status(cfg: Config, engine: str | None) -> dict[str, Any]:
+    st = apidump.status(cfg)
+    live_ver = st.get("engine_version")
+    if engine and live_ver and str(live_ver) != str(engine):
+        st["stale"] = f"live index is from engine {live_ver}, game folder has {engine}: re-run the dump"
+    elif engine and not live_ver:
+        st["stale"] = f"only the bundled index (258) is available, game folder has {engine}"
+    return st
 
 
 def list_mods(cfg: Config, query: str | None = None) -> list[dict[str, Any]]:
@@ -278,10 +290,44 @@ def game_data_query(cfg: Config, file: str, path: str | None = None, key_search:
 
 # ---------------------------------------------------------------- bundled API index & guide
 
+BUNDLED_INDEX_LABEL = "WSUS tree of game 258.4018 (10.10.2026) + api-cheatsheet v4"
+
+
 @lru_cache(maxsize=1)
 def load_api_index() -> list[dict[str, Any]]:
+    """Bundled index shipped with the package (WSUS v258.4018 + cheatsheet notes)."""
     raw = resources.files("ws_mcp").joinpath("data/api_index.json").read_text(encoding="utf-8")
     return json.loads(raw)["entries"]
+
+
+_active_cache: dict[str, Any] = {"key": None, "value": None}
+
+
+def active_index(cfg: Config | None = None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Live index imported from the game (import_api_dump) with bundled entries as fallback.
+
+    A bundled entry is dropped when the live dump covers it: the same path is live, the path was
+    probed and is absent, or its parent object was expanded in the dump (so the live listing is
+    authoritative for that level). Notes from the cheatsheet are always kept.
+    """
+    bundled = load_api_index()
+    live = apidump.load_live(cfg) if cfg is not None else None
+    if not live:
+        return bundled, {"active": "bundled", "bundled": BUNDLED_INDEX_LABEL}
+    key = apidump._live_cache["key"]
+    if _active_cache["key"] != key:
+        live_paths = {e["path"] for e in live["entries"]}
+        expanded = set(live.get("expanded", []))
+        absent = set(live.get("absent", []))
+        keep = [e for e in bundled
+                if e.get("kind") == "note" or not e.get("path")
+                or (e["path"] not in live_paths and e["path"] not in absent
+                    and apidump.parent_path(e["path"]) not in expanded)]
+        meta = {"active": "live + bundled fallback", "engine_version": live.get("engine_version"),
+                "live_entries": len(live["entries"]), "bundled_fallback_entries": len(keep),
+                "bundled": BUNDLED_INDEX_LABEL}
+        _active_cache.update(key=key, value=(live["entries"] + keep, meta))
+    return _active_cache["value"]
 
 
 @lru_cache(maxsize=1)
@@ -293,12 +339,13 @@ def _tokens(q: str) -> list[str]:
     return [t for t in re.split(r"[\s,;]+", q.lower()) if t]
 
 
-def search_api(query: str, limit: int = 20, kind: str | None = None) -> dict[str, Any]:
+def search_api(query: str, limit: int = 20, kind: str | None = None, cfg: Config | None = None) -> dict[str, Any]:
     toks = _tokens(query)
     if not toks:
         raise ToolError("Empty query.")
+    entries, meta = active_index(cfg)
     scored = []
-    for e in load_api_index():
+    for e in entries:
         if kind and e.get("kind") != kind:
             continue
         name = e.get("name", "").lower()
@@ -319,7 +366,8 @@ def search_api(query: str, limit: int = 20, kind: str | None = None) -> dict[str
         if score:
             scored.append((score, e))
     scored.sort(key=lambda x: -x[0])
-    return {"query": query, "results": [e for _, e in scored[: max(1, min(limit, 100))]], "total_matches": len(scored)}
+    return {"query": query, "index": meta, "results": [e for _, e in scored[: max(1, min(limit, 100))]],
+            "total_matches": len(scored)}
 
 
 def search_guide(query: str, limit: int = 8, context: int = 3) -> dict[str, Any]:
@@ -352,6 +400,43 @@ def search_guide(query: str, limit: int = 8, context: int = 3) -> dict[str, Any]
         if len(results) >= limit:
             break
     return {"query": query, "results": results}
+
+
+# ---------------------------------------------------------------- live API dump
+
+def api_dump_script(cfg: Config, root: str = "root", space: str = "gameplay", depth: int = 12,
+                    max_nodes: int = 20000, array_sample: int = 1, compact: bool = False, seeds: bool = True,
+                    raw: bool = True, to_table: bool = True, autorun: bool = True) -> dict[str, Any]:
+    from . import dumpscript
+    entries, meta = active_index(cfg)
+    try:
+        res = dumpscript.render(root=root, space=space, depth=depth, max_nodes=max_nodes,
+                                array_sample=array_sample, raw=raw, seeds=seeds, to_table=to_table,
+                                compact=compact, autorun=autorun, index_entries=entries)
+    except ValueError as e:
+        raise ToolError(str(e)) from e
+    res["seeds_from"] = meta["active"]
+    res["how_to_run"] = dumpscript.HOW_TO_RUN
+    res["next"] = "import_api_dump (dump_id=%s)" % res["dump_id"]
+    return res
+
+
+def import_api_dump(cfg: Config, file: str | None = None, which: str = "log.txt", dump_id: str | None = None,
+                    space: str | None = None, allow_partial: bool = False, reset: bool = False,
+                    dry_run: bool = False, limit: int = 200) -> dict[str, Any]:
+    try:
+        return apidump.import_dump(cfg, load_api_index(), file=file, which=which, dump_id=dump_id, space=space,
+                                   allow_partial=allow_partial, reset=reset, dry_run=dry_run, limit=limit)
+    except apidump.DumpError as e:
+        raise ToolError(str(e)) from e
+
+
+def api_index_status(cfg: Config) -> dict[str, Any]:
+    ev = cfg.game_dir / "engine-version.txt"
+    engine = _read_text(ev, 100).strip() if ev.is_file() else None
+    st = _index_status(cfg, engine)
+    st["game_engine_version"] = engine
+    return st
 
 
 # ---------------------------------------------------------------- logs

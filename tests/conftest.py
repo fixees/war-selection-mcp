@@ -8,6 +8,12 @@ import pytest
 from ws_mcp.config import Config
 
 
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(tmp_path, monkeypatch):
+    """Keep the live API index of the developer machine out of the tests."""
+    monkeypatch.setenv("WS_MCP_DATA_DIR", str(tmp_path / "ws-mcp-data"))
+
+
 @pytest.fixture()
 def game(tmp_path, monkeypatch) -> Config:
     g = tmp_path / "War Selection"

@@ -1,0 +1,213 @@
+Log cleared in thread 29220 at Asia/Yekaterinburg timezone Sun Oct 18 10:53:01 2026
+
+2026-10-18 05:53:01 Engine run: pid=1
+2026-10-18 05:53:01 Engine Version: 264
+2026-10-18 05:53:10 Game Version: 264.4021.e337461122577e69_29234.12142
+2026-10-18 05:53:12 Using gameplay modifications: JnHcuvqS6ga_11
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	B	1	gameplay	root	version=264;build=;depth=12;maxNodes=20000;arraySample=1;seeds=true;toTable=true
+WSDUMP	a1b2c3d4	N	root	obj	
+WSDUMP	a1b2c3d4	X	root	obj	0
+WSDUMP	a1b2c3d4	R	root
+2026-10-18 06:30:00 broken: {...}
+f_newThing: (a,b=1)
+f_random: (limit)
+f_recreateModifiedUnitTypes: ()
+finished: false
+loop: {...}
+mirror: {...}
+scene: [1]
+scripts: {...}
+synced: yes
+text: a	b
+c
+time: 0
+unitType: [2]
+version: 264
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	r	root
+WSDUMP	a1b2c3d4	N	root.auraTypes	nil	
+WSDUMP	a1b2c3d4	N	root.build	nil	
+WSDUMP	a1b2c3d4	N	root.buildPlanStayTime	nil	
+WSDUMP	a1b2c3d4	N	root.dataStorage	nil	
+WSDUMP	a1b2c3d4	N	root.defaultFormationInterval	nil	
+WSDUMP	a1b2c3d4	N	root.defaultFormationType	nil	
+WSDUMP	a1b2c3d4	N	root.envType	nil	
+WSDUMP	a1b2c3d4	N	root.f_captureParticipantState	nil	
+WSDUMP	a1b2c3d4	N	root.f_eliminatePlayer	nil	
+WSDUMP	a1b2c3d4	N	root.f_fingerprint	nil	
+WSDUMP	a1b2c3d4	N	root.f_fingerprintToFile	nil	
+WSDUMP	a1b2c3d4	N	root.f_finish	nil	
+WSDUMP	a1b2c3d4	N	root.f_playerSpecialCommand	nil	
+WSDUMP	a1b2c3d4	N	root.f_random	func	
+WSDUMP	a1b2c3d4	N	root.f_recreateModifiedUnitTypes	func	
+WSDUMP	a1b2c3d4	N	root.f_sendDataToServer	nil	
+WSDUMP	a1b2c3d4	N	root.faction	nil	
+WSDUMP	a1b2c3d4	N	root.finished	bool	false
+WSDUMP	a1b2c3d4	N	root.fowCellSize	nil	
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	N	root.fowUpdateMoveDistance	nil	
+WSDUMP	a1b2c3d4	N	root.fowUpdateMoveTime	nil	
+WSDUMP	a1b2c3d4	N	root.player	nil	
+WSDUMP	a1b2c3d4	N	root.projectileType	nil	
+WSDUMP	a1b2c3d4	N	root.researches	nil	
+WSDUMP	a1b2c3d4	N	root.scene	arr	1
+WSDUMP	a1b2c3d4	X	root.scene	arr	1
+WSDUMP	a1b2c3d4	R	root.scene
+2026-10-18 06:30:00 0: {...}
+f_clear: ()
+f_create: (...)
+size: 1
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	r	root.scene
+WSDUMP	a1b2c3d4	N	root.scene.f_clear	func	
+WSDUMP	a1b2c3d4	N	root.scene.f_create	func	
+WSDUMP	a1b2c3d4	N	root.scene.f_insert	nil	
+WSDUMP	a1b2c3d4	N	root.scene.f_move	nil	
+WSDUMP	a1b2c3d4	N	root.scene.f_remove	nil	
+WSDUMP	a1b2c3d4	N	root.scene.size	num	1
+WSDUMP	a1b2c3d4	N	root.scene[]	obj	
+WSDUMP	a1b2c3d4	X	root.scene[]	obj	0
+WSDUMP	a1b2c3d4	R	root.scene[]
+2026-10-18 06:30:00 landscape: {...}
+units: [1]
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	r	root.scene[]
+WSDUMP	a1b2c3d4	N	root.scene[].collision	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].damageEvents	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].envs	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].f_calcClustering	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].f_checkFow	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].f_createProjectile	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].f_findProjectile	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].f_initFactionsBordersZones	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].f_updateFactionsBorders	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].faction	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape	obj	
+WSDUMP	a1b2c3d4	X	root.scene[].landscape	obj	0
+WSDUMP	a1b2c3d4	R	root.scene[].landscape
+2026-10-18 06:30:00 zones: {...}
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	r	root.scene[].landscape
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_calcPath2	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_calcPathDistances	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_changeHeightCircle	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_checkCorridor	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_checkPassability	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_findFreePosition	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_findFreePositionCircle	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_getDump	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_getFaction	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_getHeight	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_getSymmetricPosition	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_inRange	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_makeFlatAll	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_makeFlatCircle	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_makeFlatPolygon	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_makeSmoothCircle	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_makeSmoothGlobal	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_makeSmoothPolygon	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_makeTerrainSymmetric	nil	
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_randomPosition2	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_randomPositionInZone	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.f_recalculatePassMap	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.factionsMapSize	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.passability	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.size	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.sizeK	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.terrain	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.zones	arr	0
+WSDUMP	a1b2c3d4	X	root.scene[].landscape.zones	arr	0
+WSDUMP	a1b2c3d4	R	root.scene[].landscape.zones
+2026-10-18 06:30:00 f_addCircle: (x,y,radius)
+size: 0
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	r	root.scene[].landscape.zones
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.zones.f_addCircle	func	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.zones.f_addRectangle	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.zones.f_getInfo	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.zones.f_getZonesAtPosition	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.zones.f_isPositionInZone	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.zones.f_list	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.zones.f_updateMap	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].landscape.zones.mapZonesVersion	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].mapData	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].pathfinding	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].players	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].projectile	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].relation	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units	arr	1
+WSDUMP	a1b2c3d4	X	root.scene[].units	arr	1
+WSDUMP	a1b2c3d4	R	root.scene[].units
+2026-10-18 06:30:00 0: {...}
+f_clear: ()
+f_create: (...)
+size: 1
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	r	root.scene[].units
+WSDUMP	a1b2c3d4	N	root.scene[].units.command	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.embeddingsHash	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_captureSpatial	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_captureTactical	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_create	func	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_createFromUnit	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_dumpSpatial	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_dumpSpatialSnapshot	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_findAll2	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_findAllByType2	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_findIdlers2	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_remove	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_search2	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.f_searchNearest2	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.list	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.operation	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units.searchCounters	nil	
+WSDUMP	a1b2c3d4	N	root.scene[].units[]	obj	
+WSDUMP	a1b2c3d4	X	root.scene[].units[]	obj	0
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	R	root.scene[].units[]
+2026-10-18 06:30:00 f_create: (...)
+health: 100
+name: worker
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	r	root.scene[].units[]
+WSDUMP	a1b2c3d4	N	root.scripts	obj	
+WSDUMP	a1b2c3d4	X	root.scripts	obj	0
+WSDUMP	a1b2c3d4	R	root.scripts
+2026-10-18 06:30:00 onStart: 1
+onTick: 2
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	r	root.scripts
+WSDUMP	a1b2c3d4	N	root.scripts.afterTick	nil	
+WSDUMP	a1b2c3d4	N	root.scripts.beforeDumpCreate	nil	
+WSDUMP	a1b2c3d4	N	root.scripts.init	nil	
+WSDUMP	a1b2c3d4	N	root.scripts.onClose	nil	
+WSDUMP	a1b2c3d4	N	root.scripts.onDump	nil	
+WSDUMP	a1b2c3d4	N	root.scripts.onPlayerEliminate	nil	
+WSDUMP	a1b2c3d4	N	root.scripts.onResearch	nil	
+WSDUMP	a1b2c3d4	N	root.scripts.onSpecialCommand	nil	
+WSDUMP	a1b2c3d4	N	root.scripts.onStart	num	1
+WSDUMP	a1b2c3d4	N	root.scripts.onUnitCustomAbility	nil	
+WSDUMP	a1b2c3d4	N	root.scripts.onUnitDeath	nil	
+WSDUMP	a1b2c3d4	N	root.scripts.onUnitInZone	nil	
+WSDUMP	a1b2c3d4	N	root.scripts.scripts	nil	
+WSDUMP	a1b2c3d4	N	root.startPositionEnv	nil	
+WSDUMP	a1b2c3d4	N	root.synced	str	yes
+WSDUMP	a1b2c3d4	N	root.time	num	0
+WSDUMP	a1b2c3d4	N	root.unitType	arr	2
+WSDUMP	a1b2c3d4	X	root.unitType	arr	2
+WSDUMP	a1b2c3d4	R	root.unitType
+2026-10-18 06:30:00 0: {...}
+1: {...}
+f_clear: ()
+f_create: (...)
+size: 2
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	r	root.unitType
+WSDUMP	a1b2c3d4	N	root.unitType.f_clear	func	
+WSDUMP	a1b2c3d4	N	root.unitType.f_copy	nil	
+WSDUMP	a1b2c3d4	N	root.unitType.f_create	func	
+WSDUMP	a1b2c3d4	N	root.unitType.f_find	nil	
+WSDUMP	a1b2c3d4	N	root.unitType.f_remove	nil	
+WSDUMP	a1b2c3d4	N	root.unitType.size	num	2
+WSDUMP	a1b2c3d4	N	root.unitType.slotCount	nil	
+WSDUMP	a1b2c3d4	N	root.unitType[]	obj	
+WSDUMP	a1b2c3d4	X	root.unitType[]	obj	0
+WSDUMP	a1b2c3d4	R	root.unitType[]
+2026-10-18 06:30:00 attack: {...}
+cost: 3
+2026-10-18 06:30:00 WSDUMP	a1b2c3d4	r	root.unitType[]
+WSDUMP	a1b2c3d4	N	root.unitTypeModified	nil	
+WSDUMP	a1b2c3d4	N	root.unitsBuildSpeedRatio	nil	
+WSDUMP	a1b2c3d4	N	root.unitsWorkSpeedRatio	nil	
+WSDUMP	a1b2c3d4	N	root.version	num	264
+WSDUMP	a1b2c3d4	E	134	ok	10
+2026-10-18 06:31:00 Session closed with reason 0

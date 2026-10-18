@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "war-selection-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local MCP server for War Selection Lua modding (cached mods, game data, API index, Russian guide)"
 readme = "README.md"
 license = "MIT"
@@ -33,7 +33,7 @@ war-selection-mcp = "ws_mcp.server:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-ws_mcp = ["data/*.json", "data/*.md"]
+ws_mcp = ["data/*.json", "data/*.md", "data/*.in"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

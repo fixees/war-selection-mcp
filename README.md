@@ -6,7 +6,7 @@
 
 Локальный MCP-сервер (stdio) для моддинга War Selection (Glyph Worlds) на Lua.
 
-[Русский](#русский) | [English](#english) | [Client setup / Подключение клиентов](docs/clients.md) | [Changelog](CHANGELOG.md)
+[Русский](#русский) | [English](#english) | [Client setup / Подключение клиентов](docs/clients.md) | [API dump / Выгрузка API](docs/api-dump.md) | [Changelog](CHANGELOG.md)
 
 Неофициальный проект, не связан с Glyph Worlds. War Selection является товарным знаком Glyph Worlds.
 
@@ -21,7 +21,7 @@
 - код скачанных модов в `modsStorage`;
 - игровые JSON-данные в `Cache/Projects/WarSelection`;
 - лог `gen/log.txt`;
-- встроенный индекс Lua API: имена и сигнатуры из дерева WSUS (игра 258.4018), а также заметки с источниками;
+- индекс Lua API: встроенный (имена и сигнатуры из дерева WSUS, игра 258.4018, плюс заметки с источниками) и живой, выгруженный из запущенной игры скриптом из `lua/` ([docs/api-dump.md](docs/api-dump.md));
 - встроенное руководство по моддингу на русском (`src/ws_mcp/data/guide-ru.md`).
 
 Кроме чтения, сервер проверяет код модов статически (синтаксис Lua 5.4 и известные ошибки), сравнивает версии модов, разбирает ошибки Lua в логе и выдаёт заготовки модов. Сетевых запросов сервер не делает.
@@ -49,6 +49,7 @@ python -m venv .venv
 |---|---|---|
 | `WS_GAME_DIR` | Папка игры | `C:\Program Files (x86)\Steam\steamapps\common\War Selection` |
 | `WS_LOG_PATH` | Путь к файлу лога или к папке с ним | `<WS_GAME_DIR>\gen\`, затем `%LOCALAPPDATA%` и `Documents` |
+| `WS_MCP_DATA_DIR` | Папка для живого индекса API | `%LOCALAPPDATA%\war-selection-mcp`; на Linux `~/.local/share/war-selection-mcp` |
 
 ### Подключение клиента
 
@@ -97,7 +98,7 @@ python -m venv .venv
 | `get_mod` | `mod_id`, `version`, `kind`, `max_chars` | Код мода; по умолчанию последняя версия | чтение |
 | `search_mod_code` | `regex`, `limit`, `context`, `latest_only` | Поиск по коду модов, результат в виде `файл:строка` с контекстом | чтение |
 | `game_data_query` | `file`, `path`, `key_search`, `limit`, `max_chars` | Значение по пути (`build[10].costBuilding`) или поиск ключа в JSON игры | чтение |
-| `search_api` | `query`, `limit`, `kind` | Поиск по индексу Lua API | чтение |
+| `search_api` | `query`, `limit`, `kind` | Поиск по индексу Lua API: живой индекс, если импортирован, иначе встроенный | чтение |
 | `search_guide` | `query`, `limit` | Поиск по встроенному руководству | чтение |
 | `read_log` | `tail`, `grep`, `which` | Последние строки `gen/log.txt` (или `log_prev.txt` и др.) | чтение |
 | `lint_mod` | `code` или `mod_id`, `version`, `kind` | Синтаксис Lua 5.4, известные ошибки (`math.random` в gameplay, нет `f_recreateModifiedUnitTypes`, `math.atan2`, неизвестные события и обработчики), неизвестные `f_*` с подсказкой | чтение |
@@ -107,13 +108,26 @@ python -m venv .venv
 | `list_events_usage` | `event` | Какие события `addMod` регистрирует каждый мод | чтение |
 | `scaffold_mod` | `template`, `params` | Заготовка мода из рецептов руководства с комментариями-источниками; без аргументов выводит список шаблонов. Код возвращается, на диск не пишется | чтение |
 | `unit_lookup` | `query`, `limit` | Типы юнитов по legacy id или пути (`legacyIds.json`) и правила постройки из `gameplay.json` | чтение |
+| `api_dump_script` | `root`, `space`, `depth`, `max_nodes`, `array_sample`, `compact`, `seeds`, `raw`, `to_table`, `autorun` | Lua-скрипт для консоли F8 или мода: выгружает дерево `root` в `gen/log.txt` строками `WSDUMP` | чтение |
+| `import_api_dump` | `file`, `which`, `dump_id`, `space`, `allow_partial`, `reset`, `dry_run`, `limit` | Разбирает выгрузку из лога, строит живой индекс в папке данных пользователя, выдаёт diff с WSUS 258 (added/removed/changed) и список нераскрытых веток | запись (только `WS_MCP_DATA_DIR`) |
+| `api_index_status` | | Активный индекс, его версия движка, число записей, устарел ли он относительно `engine-version.txt` | чтение |
 | `write_draft` | `mod_id`, `code`, `create`, `extension` | Запись `modsStorage/draft/<mod_id>.lua` | запись |
 
-`lint_mod` проверяет код статически. Неизвестные имена выдаются как предупреждения: индекс API соответствует WSUS 258.4018, а моды в кэше могут использовать функции более новых версий движка.
+`lint_mod` проверяет код статически. Неизвестные имена выдаются как предупреждения. Без живого индекса имена сверяются с WSUS 258.4018 и модами из кэша. После `import_api_dump` добавляется правило `absent-in-engine`: функция из WSUS 258, которой нет в выгрузке текущего движка.
+
+### Обновление индекса API из игры
+
+1. Возьмите `lua/wsdump.lua` (запуск через мод) или `lua/wsdump-oneline.lua` (консоль F8), либо сгенерируйте скрипт через `api_dump_script`.
+2. Запустите его в режиме разработчика на своей карте. Выгрузка пишется в `gen/log.txt`.
+3. Вызовите `import_api_dump`. Чтобы раскрыть ветки из `unexplored`, повторите шаги 1–3.
+
+Подробно, с форматом и списком проверенного и предположений: [docs/api-dump.md](docs/api-dump.md).
 
 ### Безопасность
 
-- Все инструменты, кроме `write_draft`, только читают файлы и помечены `readOnlyHint`.
+- Все инструменты, кроме `write_draft` и `import_api_dump`, только читают файлы и помечены `readOnlyHint`.
+- `import_api_dump` пишет только в `WS_MCP_DATA_DIR` (`api_index_live.json`, `.prev.json`, `api_dump_diff.json`). Если эта папка оказалась внутри папки игры, импорт отказывается.
+- Скрипт выгрузки только читает поля движка внутри `pcall` и не вызывает функции `f_*`.
 - `write_draft` пишет только в `modsStorage/draft`. Без `create=True` папку не создаёт. Перед перезаписью сохраняет `.bak` с меткой времени. Пути за пределами папки и симлинки отклоняет.
 - Файлы игры вне `modsStorage/draft` сервер не изменяет.
 - По словам разработчика (Wouw, Discord, 30.07.2023), правка файлов модов в обход внутриигрового редактора может затронуть релизную версию мода, а за это кикают из матчей и банят. Применяйте и публикуйте моды через редактор в режиме разработчика. `write_draft` используется на свой риск.
@@ -128,7 +142,7 @@ python -m venv .venv
 .venv/bin/pytest -q
 ```
 
-Тесты работают на синтетической папке игры. Чтобы прогнать дополнительный тест на реальных файлах, задайте `WS_SAMPLE_DIR`. Индекс API пересобирается скриптом `scripts/build_api_index.py`. Не коммитьте файлы игры (`modsStorage`, `Cache`, логи, `*.pack`); они перечислены в `.gitignore`.
+Тесты работают на синтетической папке игры. Чтобы прогнать дополнительный тест на реальных файлах, задайте `WS_SAMPLE_DIR`. Если в `PATH` есть `lua5.4`, скрипт выгрузки прогоняется на макете движка (`tests/fixtures/mock_engine.lua`). Встроенный индекс API пересобирается скриптом `scripts/build_api_index.py`, файлы в `lua/` скриптом `scripts/build_lua.py`, тестовая выгрузка скриптом `scripts/make_dump_fixture.py`. Не коммитьте файлы игры (`modsStorage`, `Cache`, логи, `*.pack`); они перечислены в `.gitignore`.
 
 ### Благодарности
 
@@ -151,7 +165,7 @@ Local stdio MCP server for War Selection (Glyph Worlds) Lua modding. It gives an
 - cached mod source in `modsStorage`;
 - game data JSON in `Cache/Projects/WarSelection`;
 - the game log `gen/log.txt`;
-- a bundled Lua API index: names and signatures from the WSUS tree (game 258.4018) plus sourced notes;
+- a Lua API index: bundled (names and signatures from the WSUS tree, game 258.4018, plus sourced notes) and a live one dumped from the running game with the script in `lua/` ([docs/api-dump.md](docs/api-dump.md));
 - a bundled Russian modding guide (`src/ws_mcp/data/guide-ru.md`).
 
 It also lints mod code (Lua 5.4 syntax and known pitfalls), diffs mod versions, parses Lua errors from the log and returns mod scaffolds. The server makes no network requests.
@@ -177,6 +191,7 @@ On Windows use `.venv\Scripts\pip`. Upgrade with the same command plus `--upgrad
 |---|---|---|
 | `WS_GAME_DIR` | Game directory | `C:\Program Files (x86)\Steam\steamapps\common\War Selection` |
 | `WS_LOG_PATH` | Log file or directory containing it | `<WS_GAME_DIR>\gen\`, then `%LOCALAPPDATA%` and `Documents` |
+| `WS_MCP_DATA_DIR` | Folder for the live API index | `%LOCALAPPDATA%\war-selection-mcp`; on Linux `~/.local/share/war-selection-mcp` |
 
 ### Client setup
 
@@ -191,7 +206,7 @@ Use the `mcpServers` JSON from the Russian section. `war-selection-mcp --print-c
 | `get_mod` | `mod_id`, `version`, `kind`, `max_chars` | Mod source; latest version by default | read |
 | `search_mod_code` | `regex`, `limit`, `context`, `latest_only` | Regex search across mod code with `file:line` context | read |
 | `game_data_query` | `file`, `path`, `key_search`, `limit`, `max_chars` | Value at a path (`build[10].costBuilding`) or key search in game JSON | read |
-| `search_api` | `query`, `limit`, `kind` | Search the Lua API index | read |
+| `search_api` | `query`, `limit`, `kind` | Search the Lua API index: the live index if imported, otherwise the bundled one | read |
 | `search_guide` | `query`, `limit` | Search the bundled guide | read |
 | `read_log` | `tail`, `grep`, `which` | Tail of `gen/log.txt` (or `log_prev.txt`, etc.) | read |
 | `lint_mod` | `code` or `mod_id`, `version`, `kind` | Lua 5.4 syntax, known pitfalls (`math.random` in gameplay, missing `f_recreateModifiedUnitTypes`, `math.atan2`, unknown events and handlers), unknown `f_*` names with suggestions | read |
@@ -201,13 +216,26 @@ Use the `mcpServers` JSON from the Russian section. `war-selection-mcp --print-c
 | `list_events_usage` | `event` | `addMod` events registered by each mod | read |
 | `scaffold_mod` | `template`, `params` | Starter code from guide recipes with source comments; lists templates when called without arguments. Returns code, writes nothing | read |
 | `unit_lookup` | `query`, `limit` | Unit types by legacy id or path (`legacyIds.json`) with build rules from `gameplay.json` | read |
+| `api_dump_script` | `root`, `space`, `depth`, `max_nodes`, `array_sample`, `compact`, `seeds`, `raw`, `to_table`, `autorun` | Lua script for the F8 console or a mod; dumps the `root` tree into `gen/log.txt` as `WSDUMP` lines | read |
+| `import_api_dump` | `file`, `which`, `dump_id`, `space`, `allow_partial`, `reset`, `dry_run`, `limit` | Parses the dump from the log, builds the live index in the user data folder, reports the diff against WSUS 258 (added/removed/changed) and unexplored subtrees | write (`WS_MCP_DATA_DIR` only) |
+| `api_index_status` | | Active index, its engine version, entry counts, staleness against `engine-version.txt` | read |
 | `write_draft` | `mod_id`, `code`, `create`, `extension` | Write `modsStorage/draft/<mod_id>.lua` | write |
 
-`lint_mod` is static analysis. Unknown names are reported as warnings: the API index matches WSUS 258.4018, while cached mods may use functions from newer engine builds.
+`lint_mod` is static analysis. Unknown names are warnings. Without a live index, names are checked against WSUS 258.4018 and cached mods. After `import_api_dump` the `absent-in-engine` rule reports WSUS 258 functions that the current engine does not have.
+
+### Refreshing the API index from the game
+
+1. Take `lua/wsdump.lua` (run as a mod) or `lua/wsdump-oneline.lua` (F8 console), or generate one with `api_dump_script`.
+2. Run it in developer mode on your own map. The dump goes to `gen/log.txt`.
+3. Call `import_api_dump`. Repeat steps 1-3 to expand the subtrees listed in `unexplored`.
+
+Details, record format, and what is verified versus assumed: [docs/api-dump.md](docs/api-dump.md).
 
 ### Safety notes
 
-- All tools except `write_draft` are read-only and annotated with `readOnlyHint`.
+- All tools except `write_draft` and `import_api_dump` are read-only and annotated with `readOnlyHint`.
+- `import_api_dump` writes only to `WS_MCP_DATA_DIR` (`api_index_live.json`, `.prev.json`, `api_dump_diff.json`) and refuses if that folder is inside the game folder.
+- The dump script only reads engine fields inside `pcall` and never calls `f_*` functions.
 - `write_draft` writes only to `modsStorage/draft`, does not create the folder unless `create=True`, keeps a timestamped `.bak` before overwriting, and rejects path traversal and symlinks.
 - The server does not modify game files outside `modsStorage/draft`.
 - According to the developer (Wouw, Discord, 2023-07-30), editing mod files outside the in-game editor can affect the released mod version and may result in kicks and bans. Apply and publish mods through the editor in developer mode. Use `write_draft` at your own risk.
@@ -219,7 +247,7 @@ pip install -e ".[test]"
 pytest -q
 ```
 
-Tests use a synthetic game directory; set `WS_SAMPLE_DIR` to run the optional test against real files. Rebuild the API index with `scripts/build_api_index.py`. Do not commit game files; they are listed in `.gitignore`.
+Tests use a synthetic game directory; set `WS_SAMPLE_DIR` to run the optional test against real files. With `lua5.4` on `PATH` the dump script is also run against an engine mock (`tests/fixtures/mock_engine.lua`). Rebuild the bundled index with `scripts/build_api_index.py`, the files in `lua/` with `scripts/build_lua.py`, and the dump fixture with `scripts/make_dump_fixture.py`. Do not commit game files; they are listed in `.gitignore`.
 
 ### Credits
 

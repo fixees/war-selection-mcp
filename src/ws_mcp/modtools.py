@@ -97,15 +97,28 @@ def corpus(cfg: Config) -> dict[str, Any]:
     return _corpus(_mods_signature(cfg), str(cfg.game_dir))
 
 
-@lru_cache(maxsize=1)
-def _index_knowledge() -> dict[str, Any]:
+def _index_knowledge(cfg: Config) -> dict[str, Any]:
+    entries, meta = core.active_index(cfg)
+    key = (meta.get("active"), meta.get("engine_version"), meta.get("live_entries"), id(entries))
+    return _index_knowledge_cached(key, entries)
+
+
+_knowledge_cache: dict[Any, Any] = {}
+
+
+def _index_knowledge_cached(key: tuple, entries: list[dict[str, Any]]) -> dict[str, Any]:
+    if key in _knowledge_cache:
+        return _knowledge_cache[key]
     fn: set[str] = set()
+    live_fn: set[str] = set()
     roots: dict[str, set[str]] = {"gameplay": set(), "visual": set()}
     events: set[str] = set()
-    for e in core.load_api_index():
+    for e in entries:
         p = e.get("path", "")
         if e.get("kind") == "function":
             fn.add(e["name"])
+            if str(e.get("source", "")).startswith("live dump"):
+                live_fn.add(e["name"])
         if e.get("kind") == "event":
             events.add(e["name"])
         if p.startswith("root."):
@@ -113,8 +126,19 @@ def _index_knowledge() -> dict[str, Any]:
         elif p.startswith("visual.root."):
             roots["visual"].add(p.split(".")[2].split("[")[0])
     # f_* names used in the bundled guide's verified examples (some are newer than the WSUS index)
-    fn |= set(re.findall(r"\b(f_[A-Za-z0-9_]+)\s*\(", "\n".join(core.load_guide())))
-    return {"functions": fn, "roots": roots, "events": events}
+    guide_fn = set(re.findall(r"\b(f_[A-Za-z0-9_]+)\s*\(", "\n".join(core.load_guide())))
+    fn |= guide_fn
+    absent: dict[str, str] = {}
+    live = key[0] == "live + bundled fallback"
+    if live:
+        for e in core.load_api_index():
+            if e.get("kind") == "function" and e["name"] not in fn and e["name"] not in guide_fn:
+                absent[e["name"]] = e["path"]
+    res = {"functions": fn, "roots": roots, "events": events, "absent": absent,
+           "engine": key[1], "live": live}
+    _knowledge_cache.clear()
+    _knowledge_cache[key] = res
+    return res
 
 
 # ---------------------------------------------------------------- 1. lint
@@ -139,12 +163,13 @@ def lint_mod(cfg: Config, code: str | None = None, mod_id: str | None = None, ve
             kind, basis = lk[mid], "gen/log.txt ('Using ... modifications')"
         else:
             kind, basis = lint_rules.detect_kind(code)
-    idx = _index_knowledge()
+    idx = _index_knowledge(cfg)
     c = corpus(cfg)
-    functions = idx["functions"] | c["f_names"]
+    functions = (idx["functions"] | c["f_names"]) - set(idx["absent"])
     roots = {k: idx["roots"][k] | c["roots"][k] for k in ("gameplay", "visual")}
     events = idx["events"] | {e for e, n in c["events"].items() if n >= 1}
-    res = lint_rules.lint(code, kind, functions, roots, events)
+    res = lint_rules.lint(code, kind, functions, roots, events, absent_functions=idx["absent"],
+                          index_label=f"live dump engine {idx['engine']}" if idx["live"] else "api_index (WSUS v258.4018)")
     counts = Counter(i["severity"] for i in res["issues"])
     lines = code.splitlines()
     for i in res["issues"]:
@@ -153,8 +178,10 @@ def lint_mod(cfg: Config, code: str | None = None, mod_id: str | None = None, ve
     return {**source, "kind": kind, "kind_basis": basis, "syntax_ok": res["syntax_ok"],
             "errors": counts.get("error", 0), "warnings": counts.get("warning", 0), "infos": counts.get("info", 0),
             "issues": res["issues"], "events": res.get("events", []),
-            "note": "Static checks only. Unknown names are warnings: the API index is WSUS v258.4018, "
-                    "cached mods may target a newer engine."}
+            "api_index": (f"live dump, engine {idx['engine']} (bundled WSUS v258.4018 as fallback)" if idx["live"]
+                          else "bundled WSUS v258.4018 (no live dump imported)"),
+            "note": "Static checks only. Unknown names are warnings; absent-in-engine is reported only "
+                    "when a live dump probed the name and the engine did not have it."}
 
 
 # ---------------------------------------------------------------- 2. diff
@@ -366,7 +393,7 @@ def find_examples(cfg: Config, api_name: str, limit: int = 20, context: int = 3,
         examples.append({"mod": f"mod-{mid}", "version": f["version"], "file": f["file"], "line": i + 1,
                          "exact_path": exact,
                          "context": "\n".join(f"{k + 1:>5}{'>' if k == i else ':'} {lines[k]}" for k in range(lo, hi))})
-    api = core.search_api(last_seg, limit=3)
+    api = core.search_api(last_seg, limit=3, cfg=cfg)
     return {"api_name": api_name, "total_hits": len(hits), "exact_path_hits": sum(1 for h in hits if h[0]),
             "mods_using": [{"mod": f"mod-{k}", "hits": v} for k, v in sorted(mods_using.items(), key=lambda kv: -kv[1])],
             "examples": examples, "index_entries": api["results"],

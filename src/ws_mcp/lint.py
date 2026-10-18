@@ -1,8 +1,9 @@
 """Static checks for War Selection mods: Lua syntax plus known pitfalls.
 
 Rules cite the bundled guide (guide-ru.md) section and the original source.
-Unknown-name checks are warnings only: the bundled API index (WSUS v258.4018)
-lags behind the engine, so names seen in cached mods are accepted as known.
+Unknown-name checks are warnings only. The API index is the live dump imported from the
+game when present (import_api_dump), otherwise the bundled WSUS v258.4018 tree; names seen in
+cached mods are accepted as known unless the live dump confirmed they are absent.
 """
 
 from __future__ import annotations
@@ -70,7 +71,8 @@ def _issue(sev: str, rule: str, line: int | None, msg: str, source: str, suggest
 
 
 def lint(code: str, kind: str, known_functions: set[str], known_root_fields: dict[str, set[str]],
-         known_events: set[str] | None = None) -> dict[str, Any]:
+         known_events: set[str] | None = None, absent_functions: dict[str, str] | None = None,
+         index_label: str = "api_index (WSUS v258.4018)") -> dict[str, Any]:
     """kind: 'gameplay' or 'visual'. Returns syntax status and a list of issues."""
     issues: list[dict[str, Any]] = []
     try:
@@ -177,11 +179,23 @@ def lint(code: str, kind: str, known_functions: set[str], known_root_fields: dic
                                  f"Handler '{handler}' for '{key}' is not defined in this file (it will be nil).",
                                  "Lua semantics", f"did you mean {', '.join(s)}?" if s else None))
 
-    # --- unknown names (warnings)
+    # --- names the live engine dump confirmed absent
+    absent = absent_functions or {}
     seen: set[tuple[str, int]] = set()
     for r, n in calls:
         name = last(r)
-        if not name.startswith("f_") or name in known_functions or name in defined:
+        if name in absent and name not in defined and (name, r.line) not in seen:
+            seen.add((name, r.line))
+            s = _suggest(name, known_functions)
+            issues.append(_issue("warning", "absent-in-engine", r.line,
+                                 f"{name} ({absent[name]} in WSUS v258.4018) does not exist in the live engine dump.",
+                                 index_label,
+                                 f"did you mean {', '.join(s)}?" if s else "search_api for the current name"))
+
+    # --- unknown names (warnings)
+    for r, n in calls:
+        name = last(r)
+        if not name.startswith("f_") or name in known_functions or name in defined or name in absent:
             continue
         if (name, r.line) in seen:
             continue
@@ -189,7 +203,7 @@ def lint(code: str, kind: str, known_functions: set[str], known_root_fields: dic
         s = _suggest(name, known_functions)
         issues.append(_issue("warning", "unknown-function", r.line,
                              f"{name} is not in the API index or in cached mods.",
-                             "api_index (WSUS v258.4018) + cached mods; the engine may be newer",
+                             f"{index_label} + cached mods",
                              f"did you mean {', '.join(s)}?" if s else "verify with log(<object>) in the console"))
     root_pool = known_root_fields.get(kind, set())
     if root_pool:
@@ -204,7 +218,7 @@ def lint(code: str, kind: str, known_functions: set[str], known_root_fields: dic
             s = _suggest(fld, root_pool)
             issues.append(_issue("warning", "unknown-root-field", r.line,
                                  f"root.{fld} is not in the API index or in cached {kind} mods.",
-                                 "api_index (WSUS v258.4018) + cached mods; the engine may be newer",
+                                 f"{index_label} + cached mods",
                                  f"did you mean {', '.join('root.' + x for x in s)}?" if s else None))
 
     if pr.addmod_calls == 0 and not any(last(r) in LEGACY_REGISTER for r, _ in calls) and pr.addmod_handlers == []:

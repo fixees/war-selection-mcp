@@ -12,9 +12,10 @@ from .config import Config
 
 INSTRUCTIONS = (
     "Tools for War Selection (Glyph Worlds) Lua modding on the local PC: cached mods in modsStorage, "
-    "game data JSON in Cache/Projects/WarSelection, a bundled API index (WSUS tree of game 258.4018 + "
-    "community cheatsheet) and a Russian modding guide. Everything is read-only except write_draft, "
-    "which only writes into modsStorage/draft. Never invent API names: check search_api first."
+    "game data JSON in Cache/Projects/WarSelection, an API index (live dump imported from the game when "
+    "available, otherwise the bundled WSUS tree of game 258.4018 + community cheatsheet) and a Russian "
+    "modding guide. The game folder is read-only except write_draft (modsStorage/draft only); "
+    "import_api_dump writes only to the per-user data folder. Never invent API names: check search_api first."
 )
 
 mcp = FastMCP("war-selection-mcp", instructions=INSTRUCTIONS)
@@ -66,9 +67,10 @@ def game_data_query(file: str, path: str | None = None, key_search: str | None =
 
 @mcp.tool(annotations=RO)
 def search_api(query: str, limit: int = 20, kind: str | None = None) -> dict:
-    """Search the bundled API index (function names/paths/signatures from wsunitstats.com WSUS tree v258.4018,
-    plus verified notes from our api-cheatsheet with sources). kind: 'function', 'event', 'field' or 'note'."""
-    return _run(core.search_api, query, limit, kind)
+    """Search the API index: the live dump imported with import_api_dump (current engine) when present,
+    with the bundled index as fallback (wsunitstats.com WSUS tree v258.4018 + verified notes from the
+    api-cheatsheet). kind: 'function', 'event', 'field' or 'note'. Result `index` shows which is active."""
+    return _run(core.search_api, query, limit, kind, _cfg())
 
 
 @mcp.tool(annotations=RO)
@@ -141,6 +143,40 @@ def unit_lookup(query: str, limit: int = 20) -> dict:
     return _run(modtools.unit_lookup, _cfg(), query, limit)
 
 
+@mcp.tool(annotations=RO)
+def api_dump_script(root: str = "root", space: str = "gameplay", depth: int = 12, max_nodes: int = 20000,
+                    array_sample: int = 1, compact: bool = False, seeds: bool = True, raw: bool = True,
+                    to_table: bool = True, autorun: bool = True) -> dict:
+    """Lua script for the in-game developer console / a dev-mode mod that dumps the `root` API tree into
+    gen/log.txt as WSDUMP lines (read-only: indexes fields under pcall, never calls f_* functions).
+    root: start path ('root', 'root.unitType[0]', 'root.session.visual'); space: 'gameplay' (gameplay mod
+    root) or 'visual' (visual mod root). seeds=true embeds known names from the active index so removed
+    names are detected even if the engine does not allow pairs(). compact=true returns one line for the
+    console. Arrays are sampled (array_sample elements) and written as []. Then call import_api_dump."""
+    return _run(core.api_dump_script, _cfg(), root, space, depth, max_nodes, array_sample, compact, seeds,
+                raw, to_table, autorun)
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+def import_api_dump(file: str | None = None, which: str = "log.txt", dump_id: str | None = None,
+                    space: str | None = None, allow_partial: bool = False, reset: bool = False,
+                    dry_run: bool = False, limit: int = 200) -> dict:
+    """Parse WSDUMP lines from gen/log.txt (or `which`='log_prev.txt', or an explicit `file`), build the live
+    API index and report the diff against the bundled WSUS v258.4018 index (added / removed / changed paths,
+    unexplored subtrees to dump next). Writes only to the per-user data folder (WS_MCP_DATA_DIR,
+    default %LOCALAPPDATA%/war-selection-mcp), never to the game folder. Dumps of different subtrees are
+    merged; a new engine version replaces the old index (backup kept). dry_run=true writes nothing.
+    A dump without END is refused unless allow_partial=true."""
+    return _run(core.import_api_dump, _cfg(), file, which, dump_id, space, allow_partial, reset, dry_run, limit)
+
+
+@mcp.tool(annotations=RO)
+def api_index_status() -> dict:
+    """Which API index is active (live dump or bundled), its engine version, entry counts, imported dumps,
+    and whether it is stale compared to engine-version.txt in the game folder."""
+    return _run(core.api_index_status, _cfg())
+
+
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
 def write_draft(mod_id: str, code: str, create: bool = False, extension: str = ".lua") -> dict:
     """WRITE: save mod code to modsStorage/draft/<mod_id>.lua (only there). Refuses if the draft folder is
@@ -162,7 +198,30 @@ def main(argv: list[str] | None = None) -> None:
                         help="print a config snippet for CLIENT with this installation's paths and exit: "
                              + ", ".join(sorted(clientconfig.CLIENTS)))
     parser.add_argument("--list-clients", action="store_true", help="list supported --print-config clients and exit")
+    parser.add_argument("--dump-script", action="store_true",
+                        help="print the in-game API dump script (Lua) and exit")
+    parser.add_argument("--compact", action="store_true", help="with --dump-script: one line, no seeds")
+    parser.add_argument("--dump-root", default="root", help="with --dump-script: start path (default root)")
+    parser.add_argument("--space", choices=["gameplay", "visual"], default="gameplay",
+                        help="with --dump-script: gameplay or visual mod root")
+    parser.add_argument("--import-dump", nargs="?", const="", metavar="FILE",
+                        help="import WSDUMP lines from FILE (default: gen/log.txt) into the live API index and exit")
     ns = parser.parse_args(argv)
+    if ns.dump_script:
+        res = core.api_dump_script(_cfg(), root=ns.dump_root, space=ns.space, compact=ns.compact,
+                                   seeds=not ns.compact)
+        print(res["script"])
+        return
+    if ns.import_dump is not None:
+        import json
+        import sys
+        try:
+            res = core.import_api_dump(_cfg(), file=ns.import_dump or None, limit=50)
+        except core.ToolError as e:
+            print(f"error: {e}", file=sys.stderr)
+            raise SystemExit(1) from None
+        print(json.dumps(res, ensure_ascii=False, indent=1))
+        return
     if ns.list_clients:
         for k, v in clientconfig.CLIENTS.items():
             print(f"{k:15} {v}")

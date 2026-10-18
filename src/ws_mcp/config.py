@@ -34,6 +34,18 @@ class Config:
         return self.mods_dir / "draft"
 
     @property
+    def data_dir(self) -> Path:
+        """Per-user data folder for files this server writes (imported API index). Never the game folder."""
+        override = _env_path("WS_MCP_DATA_DIR")
+        if override:
+            return override
+        local = _env_path("LOCALAPPDATA")
+        if local:
+            return local / "war-selection-mcp"
+        xdg = _env_path("XDG_DATA_HOME")
+        return (xdg or Path.home() / ".local" / "share") / "war-selection-mcp"
+
+    @property
     def project_dir(self) -> Path:
         return self.game_dir / "Cache" / "Projects" / "WarSelection"
 
