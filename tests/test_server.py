@@ -7,7 +7,8 @@ import pytest
 from ws_mcp import server
 
 EXPECTED = {"game_info", "list_mods", "get_mod", "search_mod_code", "game_data_query",
-            "search_api", "search_guide", "read_log", "write_draft"}
+            "search_api", "search_guide", "read_log", "write_draft", "lint_mod", "diff_mod", "log_errors",
+            "find_examples", "list_events_usage", "scaffold_mod", "unit_lookup"}
 
 
 def test_tools_registered():

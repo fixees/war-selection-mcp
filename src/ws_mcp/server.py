@@ -7,7 +7,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from . import core
+from . import core, modtools
 from .config import Config
 
 INSTRUCTIONS = (
@@ -85,6 +85,62 @@ def read_log(tail: int = 200, grep: str | None = None, which: str = "log.txt") -
     return _run(core.read_log, _cfg(), tail, grep, which)
 
 
+@mcp.tool(annotations=RO)
+def lint_mod(code: str | None = None, mod_id: str | None = None, version: int | None = None,
+             kind: str = "auto") -> dict:
+    """Static check of mod Lua code (pass `code`, or `mod_id` of a cached mod): Lua 5.4 syntax plus known
+    War Selection pitfalls (math.random in gameplay mods, missing root.f_recreateModifiedUnitTypes(),
+    visual mods changing game state, math.atan2, removed/renamed functions, unknown addMod events,
+    undefined handlers, unknown f_* names with suggestions). kind: auto | gameplay | visual."""
+    return _run(modtools.lint_mod, _cfg(), code, mod_id, version, kind)
+
+
+@mcp.tool(annotations=RO)
+def diff_mod(mod_id: str, v1: int | None = None, v2: int | None = None, kind: str = "lua",
+             context: int = 3) -> dict:
+    """Unified diff between two cached versions of a mod (default: previous vs latest)."""
+    return _run(modtools.diff_mod, _cfg(), mod_id, v1, v2, kind, context)
+
+
+@mcp.tool(annotations=RO)
+def log_errors(which: str = "log.txt", tail: int | None = None, since: str | None = None, limit: int = 30) -> dict:
+    """Parse Lua errors in gen/log.txt ('Lua program ... run (Error) failed' blocks and [string "..."]:N: lines),
+    group repeats, and map them to cached mods (chunk preview match + mods active at that moment).
+    `tail` limits to the last N log lines; `since` is 'YYYY-MM-DD[ HH:MM[:SS]]' in log time."""
+    return _run(modtools.log_errors, _cfg(), which, tail, since, limit)
+
+
+@mcp.tool(annotations=RO)
+def find_examples(api_name: str, limit: int = 20, context: int = 3, per_mod: int = 2) -> dict:
+    """Real usages of an API name across cached mods with file:line context, e.g. 'f_addCircle',
+    'landscape.zones.f_addCircle', 'root.f_recreateModifiedUnitTypes'. Underscore paths are matched too."""
+    return _run(modtools.find_examples, _cfg(), api_name, limit, context, per_mod)
+
+
+@mcp.tool(annotations=RO)
+def list_events_usage(event: str | None = None) -> dict:
+    """Which addMod events each cached mod registers (latest versions), with totals per event.
+    Optional `event` filter, e.g. 'onUnitInZone'."""
+    return _run(modtools.list_events_usage, _cfg(), event)
+
+
+@mcp.tool(annotations=RO)
+def scaffold_mod(template: str | None = None, params: dict | None = None) -> dict | list:
+    """Starter code built from guide recipes taken from working mods (returned, never written).
+    Call without `template` to list templates: blank_gameplay, blank_visual, zone_trigger, unit_death,
+    special_command_pair, unit_stat_tweak."""
+    if not template:
+        return modtools.list_templates()
+    return _run(modtools.scaffold_mod, template, params)
+
+
+@mcp.tool(annotations=RO)
+def unit_lookup(query: str, limit: int = 20) -> dict:
+    """Find unit types by legacy id or asset path substring (legacyIds.json) with their build rules from
+    gameplay.json (cost, health). Example: 'worker', '201', 'airplane'."""
+    return _run(modtools.unit_lookup, _cfg(), query, limit)
+
+
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
 def write_draft(mod_id: str, code: str, create: bool = False, extension: str = ".lua") -> dict:
     """WRITE: save mod code to modsStorage/draft/<mod_id>.lua (only there). Refuses if the draft folder is
@@ -94,7 +150,26 @@ def write_draft(mod_id: str, code: str, create: bool = False, extension: str = "
     return _run(core.write_draft, _cfg(), mod_id, code, create, extension)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+
+    from . import __version__, clientconfig
+
+    parser = argparse.ArgumentParser(prog="war-selection-mcp",
+                                     description="Local MCP server (stdio) for War Selection modding.")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument("--print-config", metavar="CLIENT", choices=sorted(clientconfig.CLIENTS),
+                        help="print a config snippet for CLIENT with this installation's paths and exit: "
+                             + ", ".join(sorted(clientconfig.CLIENTS)))
+    parser.add_argument("--list-clients", action="store_true", help="list supported --print-config clients and exit")
+    ns = parser.parse_args(argv)
+    if ns.list_clients:
+        for k, v in clientconfig.CLIENTS.items():
+            print(f"{k:15} {v}")
+        return
+    if ns.print_config:
+        print(clientconfig.render(ns.print_config))
+        return
     mcp.run(transport="stdio")
 
 

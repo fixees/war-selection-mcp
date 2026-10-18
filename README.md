@@ -6,7 +6,7 @@
 
 Локальный MCP-сервер (stdio) для моддинга War Selection (Glyph Worlds) на Lua.
 
-[Русский](#русский) | [English](#english)
+[Русский](#русский) | [English](#english) | [Client setup / Подключение клиентов](docs/clients.md) | [Changelog](CHANGELOG.md)
 
 Неофициальный проект, не связан с Glyph Worlds. War Selection является товарным знаком Glyph Worlds.
 
@@ -16,7 +16,7 @@
 
 ### Обзор
 
-Сервер даёт MCP-клиенту (Cursor, Claude Desktop и др.) доступ к локальным файлам установленной игры:
+Сервер даёт MCP-клиенту доступ к локальным файлам установленной игры:
 
 - код скачанных модов в `modsStorage`;
 - игровые JSON-данные в `Cache/Projects/WarSelection`;
@@ -24,7 +24,7 @@
 - встроенный индекс Lua API: имена и сигнатуры из дерева WSUS (игра 258.4018), а также заметки с источниками;
 - встроенное руководство по моддингу на русском (`src/ws_mcp/data/guide-ru.md`).
 
-Сетевых запросов сервер не делает.
+Кроме чтения, сервер проверяет код модов статически (синтаксис Lua 5.4 и известные ошибки), сравнивает версии модов, разбирает ошибки Lua в логе и выдаёт заготовки модов. Сетевых запросов сервер не делает.
 
 ### Требования
 
@@ -41,7 +41,7 @@ python -m venv .venv
 
 На Windows: `.venv\Scripts\pip install git+https://github.com/fixees/war-selection-mcp.git`.
 
-Пакет устанавливает команду `war-selection-mcp`; эквивалент: `python -m ws_mcp`.
+Обновление: та же команда с `--upgrade`. Пакет устанавливает команду `war-selection-mcp`; эквивалент: `python -m ws_mcp`.
 
 ### Настройка
 
@@ -52,15 +52,14 @@ python -m venv .venv
 
 ### Подключение клиента
 
-Cursor: `%USERPROFILE%\.cursor\mcp.json` или `.cursor/mcp.json` в проекте.
-Claude Desktop: `%APPDATA%\Claude\claude_desktop_config.json`.
+Большинство клиентов принимают блок `mcpServers`:
 
 ```json
 {
   "mcpServers": {
     "war-selection": {
-      "command": "C:\\path\\to\\.venv\\Scripts\\war-selection-mcp.exe",
-      "args": [],
+      "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "ws_mcp"],
       "env": {
         "WS_GAME_DIR": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\War Selection"
       }
@@ -69,7 +68,25 @@ Claude Desktop: `%APPDATA%\Claude\claude_desktop_config.json`.
 }
 ```
 
-Вместо exe можно указать `"command": "C:\\path\\to\\.venv\\Scripts\\python.exe"` и `"args": ["-m", "ws_mcp"]`.
+Готовый фрагмент с путём к текущему интерпретатору печатает `war-selection-mcp --print-config <client>`; список клиентов: `--list-clients`. Пути к файлам конфигурации и форматы для конкретных клиентов: [docs/clients.md](docs/clients.md).
+
+| Клиент | `--print-config` | Формат |
+|---|---|---|
+| Claude Desktop | `claude-desktop` | JSON `mcpServers` |
+| Claude Code | `claude-code` | команда `claude mcp add` |
+| Cursor | `cursor` | JSON `mcpServers` |
+| Windsurf | `windsurf` | JSON `mcpServers` |
+| VS Code | `vscode` | JSON `servers` |
+| Cline | `cline` | JSON `mcpServers` |
+| Continue | `continue` | YAML |
+| Zed | `zed` | JSON `context_servers` |
+| JetBrains AI Assistant | `jetbrains` | JSON `mcpServers` |
+| LM Studio | `lmstudio` | JSON `mcpServers` |
+| Codex CLI | `codex` | TOML `[mcp_servers]` |
+| Gemini CLI | `gemini` | JSON `mcpServers` |
+| Другие stdio-клиенты | `generic` | JSON `mcpServers` |
+
+После обновления пакета перезапустите сервер в клиенте, чтобы получить новый список инструментов.
 
 ### Инструменты
 
@@ -83,7 +100,16 @@ Claude Desktop: `%APPDATA%\Claude\claude_desktop_config.json`.
 | `search_api` | `query`, `limit`, `kind` | Поиск по индексу Lua API | чтение |
 | `search_guide` | `query`, `limit` | Поиск по встроенному руководству | чтение |
 | `read_log` | `tail`, `grep`, `which` | Последние строки `gen/log.txt` (или `log_prev.txt` и др.) | чтение |
+| `lint_mod` | `code` или `mod_id`, `version`, `kind` | Синтаксис Lua 5.4, известные ошибки (`math.random` в gameplay, нет `f_recreateModifiedUnitTypes`, `math.atan2`, неизвестные события и обработчики), неизвестные `f_*` с подсказкой | чтение |
+| `diff_mod` | `mod_id`, `v1`, `v2`, `kind`, `context` | Unified diff между версиями мода в кэше | чтение |
+| `log_errors` | `which`, `tail`, `since`, `limit` | Ошибки Lua из лога: группировка повторов, привязка к модам и строкам кода | чтение |
+| `find_examples` | `api_name`, `limit`, `context`, `per_mod` | Реальные вызовы API в модах из кэша, с учётом локальных псевдонимов | чтение |
+| `list_events_usage` | `event` | Какие события `addMod` регистрирует каждый мод | чтение |
+| `scaffold_mod` | `template`, `params` | Заготовка мода из рецептов руководства с комментариями-источниками; без аргументов выводит список шаблонов. Код возвращается, на диск не пишется | чтение |
+| `unit_lookup` | `query`, `limit` | Типы юнитов по legacy id или пути (`legacyIds.json`) и правила постройки из `gameplay.json` | чтение |
 | `write_draft` | `mod_id`, `code`, `create`, `extension` | Запись `modsStorage/draft/<mod_id>.lua` | запись |
+
+`lint_mod` проверяет код статически. Неизвестные имена выдаются как предупреждения: индекс API соответствует WSUS 258.4018, а моды в кэше могут использовать функции более новых версий движка.
 
 ### Безопасность
 
@@ -120,7 +146,7 @@ MIT, см. [LICENSE](LICENSE).
 
 ### Overview
 
-Local stdio MCP server for War Selection (Glyph Worlds) Lua modding. It gives an MCP client (Cursor, Claude Desktop, etc.) access to local game files:
+Local stdio MCP server for War Selection (Glyph Worlds) Lua modding. It gives an MCP client access to local game files:
 
 - cached mod source in `modsStorage`;
 - game data JSON in `Cache/Projects/WarSelection`;
@@ -128,7 +154,7 @@ Local stdio MCP server for War Selection (Glyph Worlds) Lua modding. It gives an
 - a bundled Lua API index: names and signatures from the WSUS tree (game 258.4018) plus sourced notes;
 - a bundled Russian modding guide (`src/ws_mcp/data/guide-ru.md`).
 
-The server makes no network requests.
+It also lints mod code (Lua 5.4 syntax and known pitfalls), diffs mod versions, parses Lua errors from the log and returns mod scaffolds. The server makes no network requests.
 
 ### Requirements
 
@@ -143,7 +169,7 @@ python -m venv .venv
 .venv/bin/pip install git+https://github.com/fixees/war-selection-mcp.git
 ```
 
-On Windows use `.venv\Scripts\pip`. The package installs the `war-selection-mcp` command; `python -m ws_mcp` is equivalent.
+On Windows use `.venv\Scripts\pip`. Upgrade with the same command plus `--upgrade`. The package installs the `war-selection-mcp` command; `python -m ws_mcp` is equivalent.
 
 ### Configuration
 
@@ -154,9 +180,7 @@ On Windows use `.venv\Scripts\pip`. The package installs the `war-selection-mcp`
 
 ### Client setup
 
-Cursor: `%USERPROFILE%\.cursor\mcp.json` or project-level `.cursor/mcp.json`.
-Claude Desktop: `%APPDATA%\Claude\claude_desktop_config.json`.
-Use the JSON from the Russian section above; other stdio clients take the same command and env.
+Use the `mcpServers` JSON from the Russian section. `war-selection-mcp --print-config <client>` prints a ready snippet with the current interpreter path; `--list-clients` lists the supported names. Per-client file locations and formats are in [docs/clients.md](docs/clients.md); the client table above applies. Restart the server in your client after upgrading so it picks up the new tool list.
 
 ### Tools
 
@@ -170,7 +194,16 @@ Use the JSON from the Russian section above; other stdio clients take the same c
 | `search_api` | `query`, `limit`, `kind` | Search the Lua API index | read |
 | `search_guide` | `query`, `limit` | Search the bundled guide | read |
 | `read_log` | `tail`, `grep`, `which` | Tail of `gen/log.txt` (or `log_prev.txt`, etc.) | read |
+| `lint_mod` | `code` or `mod_id`, `version`, `kind` | Lua 5.4 syntax, known pitfalls (`math.random` in gameplay, missing `f_recreateModifiedUnitTypes`, `math.atan2`, unknown events and handlers), unknown `f_*` names with suggestions | read |
+| `diff_mod` | `mod_id`, `v1`, `v2`, `kind`, `context` | Unified diff between cached mod versions | read |
+| `log_errors` | `which`, `tail`, `since`, `limit` | Lua errors from the log, grouped and mapped to mods and source lines | read |
+| `find_examples` | `api_name`, `limit`, `context`, `per_mod` | Real API usages in cached mods, including local aliases | read |
+| `list_events_usage` | `event` | `addMod` events registered by each mod | read |
+| `scaffold_mod` | `template`, `params` | Starter code from guide recipes with source comments; lists templates when called without arguments. Returns code, writes nothing | read |
+| `unit_lookup` | `query`, `limit` | Unit types by legacy id or path (`legacyIds.json`) with build rules from `gameplay.json` | read |
 | `write_draft` | `mod_id`, `code`, `create`, `extension` | Write `modsStorage/draft/<mod_id>.lua` | write |
+
+`lint_mod` is static analysis. Unknown names are reported as warnings: the API index matches WSUS 258.4018, while cached mods may use functions from newer engine builds.
 
 ### Safety notes
 
