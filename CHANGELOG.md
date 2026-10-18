@@ -2,6 +2,29 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## 0.4.0 - 2026-10-18
+
+### Added
+
+- Drafts: `list_mods`, `get_mod`, `search_mod_code`, `lint_mod`, `log_errors` and `game_info` read `modsStorage/draft/<id>_<version>-<hash16>.lua` next to the published cache. `get_mod` and `lint_mod` take `source` (`auto`, `draft`, `cache`); `auto` prefers the draft. `diff_mod(draft=true)` compares the published version with the draft.
+- `snapshot_game`: stores hashes of all `Cache/Projects/WarSelection` JSON files and `engine-version.txt`, normalized content of gameplay, visual, legacyIds, main, render and preload JSON, and the active API index in `WS_MCP_DATA_DIR/snapshots`. Taken on server start when the game changed (`WS_MCP_AUTO_SNAPSHOT=0` disables it) and by `--snapshot`.
+- `diff_game_versions`: diff of two snapshots by sections: files, unit types (legacyIds), build rules, researches, upgrades, auras, unit overrides, scalars, other JSON, API added/removed/changed signatures. Full diff in `WS_MCP_DATA_DIR/diffs`. With one snapshot it explains that the next update produces the diff.
+- `mod_impact`: cached mods and drafts that reference removed or renamed unit type ids, changed build rules, researches, upgrades, removed or changed API functions and fields, with `file:line`.
+- `log_tail`: cursor-based reading of `gen/log.txt`; detects recreation and truncation at game start and reads the rest of the old session from `log_prev.txt`.
+- `watch_log_start`, `watch_log_poll`, `watch_log_stop`: background watcher for Lua run and compile errors, warnings and engine errors, mapped to the draft or cached mod file with a code excerpt.
+- CLI: `--watch-log [--from-start]` prints errors live; `--snapshot`.
+- Log parser: `Error: Lua program /modsStorage/draft/... run failed:`, `Lua compilation error for: ...`, `Using obsolete parameter`, `Obsolete interface address`, `Global exception`, `Code panic`; `draft/` entries in `Using ... modifications`.
+- `docs/game-snapshots.md`, `docs/log-watch.md`.
+
+### Changed
+
+- `write_draft` overwrites only an existing draft `modsStorage/draft/<id>_<version>-<hash16>.lua` (latest version or `version`) with an atomic replace. The game creates draft files itself ("Edit script"), so the tool no longer creates files or folders.
+- `log_errors` maps errors with an explicit `/modsStorage[/draft]` path directly to that file and matches chunk previews against drafts too.
+
+### Removed
+
+- `write_draft` parameter `create` and the `modsStorage/draft/<mod_id>.lua` naming. Backups are written to `WS_MCP_DATA_DIR/draft-backups` instead of `.bak` files next to the draft.
+
 ## 0.3.0 - 2026-10-18
 
 ### Added

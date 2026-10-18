@@ -9,7 +9,8 @@ from ws_mcp import server
 EXPECTED = {"game_info", "list_mods", "get_mod", "search_mod_code", "game_data_query",
             "search_api", "search_guide", "read_log", "write_draft", "api_dump_script", "import_api_dump",
             "api_index_status", "lint_mod", "diff_mod", "log_errors",
-            "find_examples", "list_events_usage", "scaffold_mod", "unit_lookup"}
+            "find_examples", "list_events_usage", "scaffold_mod", "unit_lookup", "snapshot_game",
+            "diff_game_versions", "mod_impact", "log_tail", "watch_log_start", "watch_log_poll", "watch_log_stop"}
 
 
 def test_tools_registered():
@@ -18,7 +19,7 @@ def test_tools_registered():
     assert EXPECTED <= names
     wd = next(t for t in tools if t.name == "write_draft")
     assert wd.annotations.readOnlyHint is False
-    writers = {"write_draft", "import_api_dump"}
+    writers = {"write_draft", "import_api_dump", "snapshot_game", "diff_game_versions"}
     assert all(t.annotations.readOnlyHint for t in tools if t.name not in writers)
     assert all(not t.annotations.destructiveHint for t in tools)
 

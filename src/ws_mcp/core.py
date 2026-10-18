@@ -52,12 +52,11 @@ def normalize_mod_id(mod_id: str) -> str:
 
 # ---------------------------------------------------------------- mods cache
 
-def scan_mods(cfg: Config) -> dict[str, dict[str, Any]]:
-    """Group files in modsStorage (top level only) by mod id."""
+def _scan_dir(d: Path, source: str) -> dict[str, dict[str, Any]]:
     mods: dict[str, dict[str, Any]] = {}
-    if not cfg.mods_dir.is_dir():
+    if not d.is_dir():
         return mods
-    for entry in os.scandir(cfg.mods_dir):
+    for entry in os.scandir(d):
         if not entry.is_file():
             continue
         m = MOD_FILE_RE.match(entry.name)
@@ -70,6 +69,7 @@ def scan_mods(cfg: Config) -> dict[str, dict[str, Any]]:
             "hash": m["hash"],
             "kind": m["kind"],
             "size": entry.stat().st_size,
+            "source": source,
         })
     for mod in mods.values():
         mod["files"].sort(key=lambda f: (f["version"], f["kind"]))
@@ -77,6 +77,37 @@ def scan_mods(cfg: Config) -> dict[str, dict[str, Any]]:
         mod["latest"] = mod["versions"][-1]
         mod["kinds"] = sorted({f["kind"] for f in mod["files"]})
     return mods
+
+
+def scan_mods(cfg: Config) -> dict[str, dict[str, Any]]:
+    """Published mod cache: modsStorage/<id>_<version>-<hash16>.lua|.prm (top level)."""
+    return _scan_dir(cfg.mods_dir, "cache")
+
+
+def scan_drafts(cfg: Config) -> dict[str, dict[str, Any]]:
+    """Developer-mode drafts: modsStorage/draft/<id>_<version>-<hash16>.lua|.prm.
+
+    Layout from game logs: 'Lua program /modsStorage/draft/Cl0LWNP6m05_1-0436ea81441a4e3a.lua run failed'
+    and 'Using gameplay modifications: ..., draft/ngT0BxgSsVh_6'. The game creates the file when the
+    mod script is opened with "edit script" in developer mode.
+    """
+    return _scan_dir(cfg.draft_dir, "draft")
+
+
+def mod_file_path(cfg: Config, f: dict[str, Any]) -> Path:
+    return (cfg.draft_dir if f.get("source") == "draft" else cfg.mods_dir) / f["file"]
+
+
+def latest_sources(cfg: Config, include_drafts: bool = True) -> list[dict[str, Any]]:
+    """Latest .lua file of every cached mod plus the latest draft of every draft mod."""
+    out = []
+    groups = [scan_mods(cfg)] + ([scan_drafts(cfg)] if include_drafts else [])
+    for mods in groups:
+        for mod in mods.values():
+            for f in mod["files"]:
+                if f["kind"] == "lua" and f["version"] == mod["latest"]:
+                    out.append({**f, "id": mod["id"], "path": mod_file_path(cfg, f)})
+    return sorted(out, key=lambda f: (f["id"].lower(), f["source"]))
 
 
 def game_info(cfg: Config) -> dict[str, Any]:
@@ -98,13 +129,23 @@ def game_info(cfg: Config) -> dict[str, Any]:
         "mods_files_prm": sum(1 for f in files if f["kind"] == "prm"),
         "draft_dir": str(cfg.draft_dir),
         "draft_dir_exists": cfg.draft_dir.is_dir(),
+        "drafts": sorted(f"{m['id']}_{m['latest']}" for m in scan_drafts(cfg).values()),
         "project_dir": str(proj),
         "project_files": project_files,
         "log_found": logs,
         "api_index": _index_status(cfg, engine),
+        "snapshots": _snapshot_status(cfg),
         "note": ("Bundled index is WSUS v258.4018. Refresh it from the running game: api_dump_script, "
                  "then import_api_dump."),
     }
+
+
+def _snapshot_status(cfg: Config) -> dict[str, Any]:
+    from . import snapshots
+    try:
+        return snapshots.snapshot_status(cfg)
+    except OSError as e:
+        return {"state": f"error: {e}"}
 
 
 def _index_status(cfg: Config, engine: str | None) -> dict[str, Any]:
@@ -118,79 +159,100 @@ def _index_status(cfg: Config, engine: str | None) -> dict[str, Any]:
 
 
 def list_mods(cfg: Config, query: str | None = None) -> list[dict[str, Any]]:
+    cache, drafts = scan_mods(cfg), scan_drafts(cfg)
     out = []
-    for mod in sorted(scan_mods(cfg).values(), key=lambda m: m["id"].lower()):
-        if query and query.lower() not in mod["id"].lower():
+    for mid in sorted(set(cache) | set(drafts), key=str.lower):
+        if query and query.lower() not in mid.lower():
             continue
-        latest = [f for f in mod["files"] if f["version"] == mod["latest"]]
-        out.append({
-            "id": mod["id"],
-            "mod_ref": f"mod-{mod['id']}",
-            "versions": mod["versions"],
-            "latest": mod["latest"],
-            "kinds": mod["kinds"],
-            "latest_sizes": {f["kind"]: f["size"] for f in latest},
-            "files": len(mod["files"]),
-        })
+        mod = cache.get(mid)
+        entry: dict[str, Any] = {"id": mid, "mod_ref": f"mod-{mid}"}
+        if mod:
+            latest = [f for f in mod["files"] if f["version"] == mod["latest"]]
+            entry.update(versions=mod["versions"], latest=mod["latest"], kinds=mod["kinds"],
+                         latest_sizes={f["kind"]: f["size"] for f in latest}, files=len(mod["files"]))
+        else:
+            entry.update(versions=[], latest=None, kinds=[], latest_sizes={}, files=0)
+        d = drafts.get(mid)
+        entry["draft"] = None if not d else {
+            "versions": d["versions"], "latest": d["latest"],
+            "files": [f["file"] for f in d["files"] if f["version"] == d["latest"]]}
+        out.append(entry)
     return out
 
 
 def get_mod(cfg: Config, mod_id: str, version: int | None = None, kind: str = "lua",
-            max_chars: int = 60_000) -> dict[str, Any]:
+            max_chars: int = 60_000, source: str = "auto") -> dict[str, Any]:
+    """source: 'auto' (draft if one exists, else published cache), 'draft' or 'cache'."""
     mid = normalize_mod_id(mod_id)
     if kind not in ("lua", "prm"):
         raise ToolError("kind must be 'lua' or 'prm'.")
-    mod = scan_mods(cfg).get(mid)
+    if source not in ("auto", "draft", "cache"):
+        raise ToolError("source must be 'auto', 'draft' or 'cache'.")
+    cache, draft = scan_mods(cfg).get(mid), scan_drafts(cfg).get(mid)
+    if source == "auto":
+        mod = draft if draft and (version is None or version in draft["versions"]) else cache
+    else:
+        mod = draft if source == "draft" else cache
     if not mod:
-        raise ToolError(f"Mod {mid} is not in the local cache {cfg.mods_dir}. It is downloaded when a map using it is started.")
+        where = {"draft": f"draft folder {cfg.draft_dir}", "cache": f"cache {cfg.mods_dir}"}.get(source,
+                 f"cache {cfg.mods_dir} or draft folder {cfg.draft_dir}")
+        raise ToolError(f"Mod {mid} is not in the {where}. Published mods are downloaded when a map using them "
+                        "starts; a draft appears when you open the mod script with 'edit script' in developer mode.")
     ver = mod["latest"] if version is None else int(version)
     files = [f for f in mod["files"] if f["version"] == ver and f["kind"] == kind]
     if not files:
         avail = sorted({(f["version"], f["kind"]) for f in mod["files"]})
-        raise ToolError(f"No {kind} file for {mid} version {ver}. Available (version, kind): {avail}")
+        raise ToolError(f"No {kind} file for {mid} version {ver} in {mod['files'][0]['source']}. "
+                        f"Available (version, kind): {avail}")
     f = files[0]
-    code = _read_text(cfg.mods_dir / f["file"])
+    code = _read_text(mod_file_path(cfg, f))
     truncated = len(code) > max_chars
     return {
         "id": mid,
         "version": ver,
         "kind": kind,
+        "source": f["source"],
         "file": f["file"],
+        "path": str(mod_file_path(cfg, f)),
         "size": f["size"],
         "other_files": [x["file"] for x in mod["files"] if x is not f],
+        "draft_versions": draft["versions"] if draft else [],
+        "cache_versions": cache["versions"] if cache else [],
         "truncated": truncated,
         "code": code[:max_chars],
     }
 
 
 def search_mod_code(cfg: Config, regex: str, limit: int = 50, context: int = 2,
-                    latest_only: bool = True, ignore_case: bool = True) -> dict[str, Any]:
+                    latest_only: bool = True, ignore_case: bool = True, include_drafts: bool = True) -> dict[str, Any]:
     try:
         rx = re.compile(regex, re.IGNORECASE if ignore_case else 0)
     except re.error as e:
         raise ToolError(f"Bad regex: {e}") from e
     limit = max(1, min(int(limit), 500))
     context = max(0, min(int(context), 10))
-    mods = scan_mods(cfg)
+    groups = [scan_mods(cfg)] + ([scan_drafts(cfg)] if include_drafts else [])
     results = []
     files_scanned = 0
-    for mod in sorted(mods.values(), key=lambda m: m["id"].lower()):
-        files = [f for f in mod["files"] if not latest_only or f["version"] == mod["latest"]]
-        for f in files:
-            files_scanned += 1
-            lines = _read_text(cfg.mods_dir / f["file"]).splitlines()
-            for i, line in enumerate(lines):
-                if rx.search(line):
-                    lo, hi = max(0, i - context), min(len(lines), i + context + 1)
-                    results.append({
-                        "file": f["file"],
-                        "mod": f"mod-{mod['id']}",
-                        "version": f["version"],
-                        "line": i + 1,
-                        "context": "\n".join(f"{n + 1:>5}{'>' if n == i else ':'} {lines[n]}" for n in range(lo, hi)),
-                    })
-                    if len(results) >= limit:
-                        return {"matches": results, "files_scanned": files_scanned, "truncated": True}
+    for mods in groups:
+        for mod in sorted(mods.values(), key=lambda m: m["id"].lower()):
+            files = [f for f in mod["files"] if not latest_only or f["version"] == mod["latest"]]
+            for f in files:
+                files_scanned += 1
+                lines = _read_text(mod_file_path(cfg, f)).splitlines()
+                for i, line in enumerate(lines):
+                    if rx.search(line):
+                        lo, hi = max(0, i - context), min(len(lines), i + context + 1)
+                        results.append({
+                            "file": f["file"],
+                            "source": f["source"],
+                            "mod": f"mod-{mod['id']}",
+                            "version": f["version"],
+                            "line": i + 1,
+                            "context": "\n".join(f"{n + 1:>5}{'>' if n == i else ':'} {lines[n]}" for n in range(lo, hi)),
+                        })
+                        if len(results) >= limit:
+                            return {"matches": results, "files_scanned": files_scanned, "truncated": True}
     return {"matches": results, "files_scanned": files_scanned, "truncated": False}
 
 
@@ -439,6 +501,43 @@ def api_index_status(cfg: Config) -> dict[str, Any]:
     return st
 
 
+# ---------------------------------------------------------------- game version snapshots
+
+def snapshot_game(cfg: Config, force: bool = False, label: str | None = None) -> dict[str, Any]:
+    from . import snapshots
+    entries, meta = active_index(cfg)
+    label_txt = meta["active"] + (f", engine {meta['engine_version']}" if meta.get("engine_version") else "")
+    try:
+        return snapshots.snapshot_game(cfg, entries, label_txt, force=force, label=label)
+    except snapshots.SnapshotError as e:
+        raise ToolError(str(e)) from e
+
+
+def diff_game_versions(cfg: Config, a: str | None = None, b: str | None = None, limit: int = 100,
+                       auto_snapshot: bool = True) -> dict[str, Any]:
+    from . import snapshots
+    taken = None
+    if auto_snapshot and a is None and b is None and cfg.project_dir.is_dir():
+        taken = snapshot_game(cfg)
+    try:
+        res = snapshots.diff_versions(cfg, a, b, limit=limit)
+    except snapshots.SnapshotError as e:
+        raise ToolError(str(e)) from e
+    if taken is not None:
+        res["auto_snapshot"] = {k: taken[k] for k in ("taken", "reason", "snapshot")}
+    res["available"] = [s["id"] for s in snapshots.list_snapshots(cfg)]
+    return res
+
+
+def mod_impact(cfg: Config, a: str | None = None, b: str | None = None, limit: int = 200,
+               include_drafts: bool = True) -> dict[str, Any]:
+    from . import impact, snapshots
+    try:
+        return impact.mod_impact(cfg, a, b, limit, include_drafts)
+    except snapshots.SnapshotError as e:
+        raise ToolError(str(e)) from e
+
+
 # ---------------------------------------------------------------- logs
 
 def read_log(cfg: Config, tail: int = 200, grep: str | None = None, which: str = "log.txt") -> dict[str, Any]:
@@ -478,49 +577,62 @@ def read_log(cfg: Config, tail: int = 200, grep: str | None = None, which: str =
 # ---------------------------------------------------------------- write
 
 WRITE_WARNING = (
-    "Wouw (#existing-mods-customize-help, 30.07.2023): editing mod files bypassing the in-game editor "
-    "may hit the release file instead of the draft and lead to kicks/bans. This tool writes ONLY to "
-    "modsStorage/draft; open the mod in the in-game editor (developer mode) to apply/release it."
+    "Only modsStorage/draft/<id>_<version>-<hash>.lua is written: the file the game opens with 'edit script' "
+    "in developer mode. Published files in modsStorage are never touched (Wouw, #existing-mods-customize-help, "
+    "30.07.2023: editing release files outside the editor can lead to kicks/bans). Save/apply the mod in the "
+    "game afterwards."
 )
 
 
-def write_draft(cfg: Config, mod_id: str, code: str, create: bool = False, extension: str = ".lua") -> dict[str, Any]:
-    name = mod_id.strip()
-    if name.lower().startswith("mod-"):
-        name = name[4:]
-    if not DRAFT_NAME_RE.match(name):
-        raise ToolError("mod_id may contain only letters, digits, '_' and '-' (max 64 chars), no paths.")
+def _backup_dir(cfg: Config) -> Path:
+    d = cfg.data_dir / "draft-backups"
+    gr = os.path.normcase(str(cfg.game_dir.resolve()))
+    dr = os.path.normcase(str(d.resolve()))
+    if dr == gr or dr.startswith(gr + os.sep):
+        raise ToolError(f"Data folder {cfg.data_dir} is inside the game folder; refusing. Set WS_MCP_DATA_DIR.")
+    return d
+
+
+def write_draft(cfg: Config, mod_id: str, code: str, version: int | None = None,
+                extension: str = ".lua") -> dict[str, Any]:
+    """Overwrite an existing draft file of a mod. Never creates files in the game folder."""
+    mid = normalize_mod_id(mod_id)
     if extension not in (".lua", ".prm"):
         raise ToolError("extension must be '.lua' or '.prm'.")
     data = code.encode("utf-8")
     if len(data) > MAX_DRAFT_BYTES:
         raise ToolError(f"Code is too large ({len(data)} bytes, max {MAX_DRAFT_BYTES}).")
-    if not cfg.mods_dir.is_dir():
-        raise ToolError(f"modsStorage not found at {cfg.mods_dir}. Check WS_GAME_DIR.")
     draft = cfg.draft_dir
-    if draft.is_symlink():
-        raise ToolError("draft folder is a symlink; refusing to write.")
-    if not draft.is_dir():
-        if not create:
-            raise ToolError(f"Draft folder {draft} does not exist. It is normally created by the game when you edit a mod "
-                            "in developer mode. Pass create=True to create it anyway.")
-        draft.mkdir(parents=False, exist_ok=True)
+    if draft.is_symlink() or cfg.mods_dir.is_symlink():
+        raise ToolError("modsStorage or draft folder is a symlink; refusing to write.")
+    mod = scan_drafts(cfg).get(mid)
+    kind = extension[1:]
+    if not mod:
+        raise ToolError(
+            f"No draft for mod-{mid} in {draft}. In the game: map editor -> your map -> Modifications -> "
+            f"mod-{mid} -> 'edit script'. The game then creates modsStorage/draft/{mid}_<version>-<hash>.lua; "
+            "run write_draft again after that.")
+    ver = mod["latest"] if version is None else int(version)
+    files = [f for f in mod["files"] if f["version"] == ver and f["kind"] == kind]
+    if not files:
+        avail = sorted({(f["version"], f["kind"]) for f in mod["files"]})
+        raise ToolError(f"No {kind} draft for mod-{mid} version {ver}. Draft files (version, kind): {avail}")
     root = draft.resolve()
-    target = (draft / f"{name}{extension}").resolve()
+    target = (draft / files[0]["file"]).resolve()
     if os.path.normcase(str(target.parent)) != os.path.normcase(str(root)):
         raise ToolError("Resolved path escapes the draft folder; refusing.")
-    if target.exists() and (target.is_symlink() or not target.is_file()):
-        raise ToolError("Target exists and is not a regular file; refusing.")
+    if target.is_symlink() or not target.is_file():
+        raise ToolError("Draft target is not a regular file; refusing.")
 
-    backup = None
-    if target.exists():
-        stamp = time.strftime("%Y%m%d-%H%M%S")
-        backup = target.with_name(f"{target.name}.{stamp}.bak")
-        n = 1
-        while backup.exists():
-            backup = target.with_name(f"{target.name}.{stamp}-{n}.bak")
-            n += 1
-        shutil.copy2(target, backup)
+    bdir = _backup_dir(cfg)
+    bdir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    backup = bdir / f"{target.name}.{stamp}.bak"
+    n = 1
+    while backup.exists():
+        backup = bdir / f"{target.name}.{stamp}-{n}.bak"
+        n += 1
+    shutil.copy2(target, backup)
 
     fd, tmp = tempfile.mkstemp(prefix=".ws-mcp-", suffix=".tmp", dir=root)
     try:
@@ -533,7 +645,9 @@ def write_draft(cfg: Config, mod_id: str, code: str, create: bool = False, exten
         raise
     return {
         "written": str(target),
+        "mod": f"mod-{mid}",
+        "version": ver,
         "bytes": len(data),
-        "backup": str(backup) if backup else None,
+        "backup": str(backup),
         "warning": WRITE_WARNING,
     }

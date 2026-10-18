@@ -109,38 +109,65 @@ def test_read_log_override(game, tmp_path, monkeypatch):
     assert core.read_log(Config.from_env())["path"] == str(p)
 
 
-def test_write_draft_requires_folder(game):
-    with pytest.raises(core.ToolError, match="does not exist"):
+DRAFT = "EEEEEEEEEE5_2-abcdefabcdef0123.lua"
+
+
+def _make_draft(game, name=DRAFT, text="-- draft v2\n"):
+    game.draft_dir.mkdir(exist_ok=True)
+    (game.draft_dir / name).write_text(text, encoding="utf-8")
+    return game.draft_dir / name
+
+
+def test_write_draft_requires_existing_draft(game):
+    with pytest.raises(core.ToolError, match="edit script"):
         core.write_draft(game, "AAAAAAAAAA1", "print(1)")
     assert not game.draft_dir.exists()
-
-
-def test_write_draft_create_and_backup(game):
-    r = core.write_draft(game, "mod-AAAAAAAAAA1", "print(1)", create=True)
-    target = Path(r["written"])
-    assert target.read_text() == "print(1)" and r["backup"] is None
-    r2 = core.write_draft(game, "AAAAAAAAAA1", "print(2)")
-    assert target.read_text() == "print(2)"
-    assert Path(r2["backup"]).read_text() == "print(1)"
-    assert "draft" in r2["warning"]
-    # never touches release files in modsStorage root
-    assert (game.mods_dir / "AAAAAAAAAA1_3-0123456789abcdef.lua").read_text(encoding="utf-8").startswith("-- v3")
-
-
-@pytest.mark.parametrize("bad", ["../evil", "..\\evil", "a/b", "C:\\x", "", "x" * 65, ".hidden", "a b"])
-def test_write_draft_path_traversal(game, bad):
     game.draft_dir.mkdir()
-    with pytest.raises(core.ToolError):
-        core.write_draft(game, bad, "x")
+    with pytest.raises(core.ToolError, match="No draft"):
+        core.write_draft(game, "AAAAAAAAAA1", "print(1)")
     assert list(game.draft_dir.iterdir()) == []
 
 
+def test_write_draft_overwrites_latest_draft_with_backup(game):
+    _make_draft(game, "EEEEEEEEEE5_1-abcdefabcdef0123.lua", "-- old v1\n")
+    target = _make_draft(game)
+    r = core.write_draft(game, "mod-EEEEEEEEEE5", "print(1)")
+    assert Path(r["written"]) == target.resolve() and r["version"] == 2
+    assert target.read_text() == "print(1)"
+    backup = Path(r["backup"])
+    assert backup.read_text() == "-- draft v2\n" and backup.parent == game.data_dir / "draft-backups"
+    assert sorted(p.name for p in game.draft_dir.iterdir()) == ["EEEEEEEEEE5_1-abcdefabcdef0123.lua", DRAFT]
+    r1 = core.write_draft(game, "EEEEEEEEEE5", "print(0)", version=1)
+    assert (game.draft_dir / "EEEEEEEEEE5_1-abcdefabcdef0123.lua").read_text() == "print(0)" and r1["version"] == 1
+    # published files in modsStorage root are never touched
+    assert (game.mods_dir / "AAAAAAAAAA1_3-0123456789abcdef.lua").read_text(encoding="utf-8").startswith("-- v3")
+    assert "draft" in r["warning"]
+
+
+@pytest.mark.parametrize("bad", ["../evil", "..\\evil", "a/b", "C:\\x", "", "x" * 65, ".hidden", "a b"])
+def test_write_draft_rejects_bad_ids(game, bad):
+    _make_draft(game)
+    with pytest.raises(core.ToolError):
+        core.write_draft(game, bad, "x")
+    assert [p.name for p in game.draft_dir.iterdir()] == [DRAFT]
+
+
 def test_write_draft_bad_extension_and_size(game):
-    game.draft_dir.mkdir()
+    _make_draft(game)
     with pytest.raises(core.ToolError):
-        core.write_draft(game, "abc", "x", extension=".exe")
+        core.write_draft(game, "EEEEEEEEEE5", "x", extension=".exe")
     with pytest.raises(core.ToolError):
-        core.write_draft(game, "abc", "x" * (core.MAX_DRAFT_BYTES + 1))
+        core.write_draft(game, "EEEEEEEEEE5", "x" * (core.MAX_DRAFT_BYTES + 1))
+    with pytest.raises(core.ToolError, match="No prm draft"):
+        core.write_draft(game, "EEEEEEEEEE5", "x", extension=".prm")
+
+
+def test_write_draft_refuses_backup_dir_in_game_folder(game, monkeypatch):
+    _make_draft(game)
+    monkeypatch.setenv("WS_MCP_DATA_DIR", str(game.game_dir / "gen" / "x"))
+    with pytest.raises(core.ToolError, match="inside the game folder"):
+        core.write_draft(Config.from_env(), "EEEEEEEEEE5", "x")
+    assert (game.draft_dir / DRAFT).read_text() == "-- draft v2\n"
 
 
 @pytest.mark.skipif(os.name == "nt", reason="symlink creation needs privileges on Windows")
@@ -148,10 +175,30 @@ def test_write_draft_symlink_target(game, tmp_path):
     game.draft_dir.mkdir()
     outside = tmp_path / "outside.lua"
     outside.write_text("keep")
-    (game.draft_dir / "evil.lua").symlink_to(outside)
+    (game.draft_dir / DRAFT).symlink_to(outside)
     with pytest.raises(core.ToolError):
-        core.write_draft(game, "evil", "pwn")
+        core.write_draft(game, "EEEEEEEEEE5", "pwn")
     assert outside.read_text() == "keep"
+
+
+def test_drafts_in_list_get_search(game):
+    _make_draft(game, "AAAAAAAAAA1_4-0123456789abcdef.lua", "-- draft of A\nfunction onStart() end\n")
+    _make_draft(game)
+    mods = {m["id"]: m for m in core.list_mods(game)}
+    assert mods["AAAAAAAAAA1"]["latest"] == 3 and mods["AAAAAAAAAA1"]["draft"]["latest"] == 4
+    assert mods["EEEEEEEEEE5"]["versions"] == [] and mods["EEEEEEEEEE5"]["draft"]["latest"] == 2
+    assert mods["BBBBBBBBBB2"]["draft"] is None
+    g = core.get_mod(game, "AAAAAAAAAA1")
+    assert g["source"] == "draft" and g["version"] == 4 and g["code"].startswith("-- draft of A")
+    c = core.get_mod(game, "AAAAAAAAAA1", source="cache")
+    assert c["source"] == "cache" and c["version"] == 3
+    assert core.get_mod(game, "AAAAAAAAAA1", version=3)["source"] == "cache"
+    with pytest.raises(core.ToolError, match="draft folder"):
+        core.get_mod(game, "BBBBBBBBBB2", source="draft")
+    hits = core.search_mod_code(game, "draft of A")["matches"]
+    assert hits and hits[0]["source"] == "draft"
+    assert not core.search_mod_code(game, "draft of A", include_drafts=False)["matches"]
+    assert core.game_info(game)["drafts"] == ["AAAAAAAAAA1_4", "EEEEEEEEEE5_2"]
 
 
 def test_read_log_other_names(game):

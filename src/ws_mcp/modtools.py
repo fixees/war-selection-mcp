@@ -11,38 +11,36 @@ from collections import Counter, defaultdict
 from functools import lru_cache
 from typing import Any
 
-from . import core, lint as lint_rules
+from . import core, lint as lint_rules, logparse
 from .config import Config
 from .lua_syntax import LuaSyntaxError, parse
 from .scaffolds import TEMPLATES
 
-USING_RE = re.compile(r"Using (gameplay|visual) modifications:\s*(.*)$")
+USING_RE = logparse.USING_RE
 MOD_TOKEN_RE = re.compile(r"\b([A-Za-z0-9]{11})_(\d+)\b")
-LOG_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s?(.*)$")
-LUA_FAIL_RE = re.compile(r"Lua program (?P<script>\S+) run \((?P<status>[^)]*)\) failed:?")
-FRAME_RE = re.compile(r"^\s*Line:\s*(-?\d+)\s+function:\[([^\]]*)\]")
-CHUNK_RE = re.compile(r'\[string "(?P<preview>.*?)(?:\.\.\.)?"\]:(?P<line>-?\d+):\s*(?P<msg>.*)')
+LOG_TS_RE = logparse.LOG_TS_RE
+LUA_FAIL_RE = logparse.LUA_FAIL_RE
+FRAME_RE = logparse.FRAME_RE
+CHUNK_RE = logparse.CHUNK_RE
 F_NAME_RE = re.compile(r"\bf_[A-Za-z0-9_]+")
 ROOT_FIELD_RE = re.compile(r"\broot[._]([A-Za-z][A-Za-z0-9]*)")
 
 
 # ---------------------------------------------------------------- knowledge
 
-def _latest_files(cfg: Config) -> list[tuple[str, int, str]]:
-    out = []
-    for mod in core.scan_mods(cfg).values():
-        for f in mod["files"]:
-            if f["kind"] == "lua" and f["version"] == mod["latest"]:
-                out.append((mod["id"], f["version"], f["file"]))
-    return sorted(out)
+def _latest_files(cfg: Config) -> list[tuple[str, int, str, str]]:
+    return [(f["id"], f["version"], f["file"], str(f["path"])) for f in core.latest_sources(cfg)]
 
 
 def _mods_signature(cfg: Config) -> tuple:
-    d = cfg.mods_dir
-    if not d.is_dir():
-        return (str(d), 0, 0)
-    st = d.stat()
-    return (str(d), st.st_mtime, len(list(d.iterdir())))
+    out: list = []
+    for d in (cfg.mods_dir, cfg.draft_dir):
+        if d.is_dir():
+            st = d.stat()
+            out += [str(d), st.st_mtime, len(list(d.iterdir()))]
+        else:
+            out += [str(d), 0, 0]
+    return tuple(out)
 
 
 def mod_kinds_from_log(cfg: Config) -> dict[str, str]:
@@ -68,8 +66,8 @@ def _corpus(sig: tuple, game_dir: str) -> dict[str, Any]:
     roots: dict[str, set[str]] = {"gameplay": set(), "visual": set()}
     events: Counter = Counter()
     per_mod: dict[str, dict[str, Any]] = {}
-    for mid, ver, fname in _latest_files(cfg):
-        code = core._read_text(cfg.mods_dir / fname)
+    for mid, ver, fname, fpath in _latest_files(cfg):
+        code = core._read_text(__import__("pathlib").Path(fpath))
         kind = log_kinds.get(mid) or lint_rules.detect_kind(code)[0]
         f_names.update(F_NAME_RE.findall(code))
         info: dict[str, Any] = {"id": mid, "version": ver, "file": fname, "kind": kind,
@@ -144,16 +142,16 @@ def _index_knowledge_cached(key: tuple, entries: list[dict[str, Any]]) -> dict[s
 # ---------------------------------------------------------------- 1. lint
 
 def lint_mod(cfg: Config, code: str | None = None, mod_id: str | None = None, version: int | None = None,
-             kind: str = "auto") -> dict[str, Any]:
+             kind: str = "auto", source_kind: str = "auto") -> dict[str, Any]:
     if (code is None) == (mod_id is None):
         raise core.ToolError("Pass exactly one of `code` or `mod_id`.")
     if kind not in ("auto", "gameplay", "visual"):
         raise core.ToolError("kind must be 'auto', 'gameplay' or 'visual'.")
     source: dict[str, Any] = {}
     if mod_id is not None:
-        m = core.get_mod(cfg, mod_id, version, "lua", max_chars=core.MAX_READ_BYTES)
+        m = core.get_mod(cfg, mod_id, version, "lua", max_chars=core.MAX_READ_BYTES, source=source_kind)
         code = m["code"]
-        source = {"mod": f"mod-{m['id']}", "version": m["version"], "file": m["file"]}
+        source = {"mod": f"mod-{m['id']}", "version": m["version"], "file": m["file"], "source": m["source"]}
     assert code is not None
     basis = "argument"
     if kind == "auto":
@@ -187,30 +185,39 @@ def lint_mod(cfg: Config, code: str | None = None, mod_id: str | None = None, ve
 # ---------------------------------------------------------------- 2. diff
 
 def diff_mod(cfg: Config, mod_id: str, v1: int | None = None, v2: int | None = None, kind: str = "lua",
-             context: int = 3, max_chars: int = 60_000) -> dict[str, Any]:
+             context: int = 3, max_chars: int = 60_000, draft: bool = False) -> dict[str, Any]:
+    """Diff two published versions, or (draft=True) published version v1 (default latest) against the draft."""
     mid = core.normalize_mod_id(mod_id)
-    mod = core.scan_mods(cfg).get(mid)
-    if not mod:
-        raise core.ToolError(f"Mod {mid} is not in the local cache.")
-    vers = sorted({f["version"] for f in mod["files"] if f["kind"] == kind})
-    if not vers:
-        raise core.ToolError(f"No {kind} files for {mid}.")
-    if v2 is None:
-        v2 = vers[-1]
-    if v1 is None:
-        older = [v for v in vers if v < v2]
-        if not older:
-            raise core.ToolError(f"Only one cached {kind} version ({v2}) of {mid}; nothing to diff. Versions: {vers}")
-        v1 = older[-1]
-    a = core.get_mod(cfg, mid, v1, kind, max_chars=core.MAX_READ_BYTES)
-    b = core.get_mod(cfg, mid, v2, kind, max_chars=core.MAX_READ_BYTES)
-    al, bl = a["code"].splitlines(), b["code"].splitlines()
     context = max(0, min(int(context), 20))
-    diff = list(difflib.unified_diff(al, bl, fromfile=a["file"], tofile=b["file"], n=context, lineterm=""))
+    if draft:
+        b = core.get_mod(cfg, mid, v2, kind, max_chars=core.MAX_READ_BYTES, source="draft")
+        a = core.get_mod(cfg, mid, v1, kind, max_chars=core.MAX_READ_BYTES, source="cache")
+        vers = a["cache_versions"]
+    else:
+        mod = core.scan_mods(cfg).get(mid)
+        if not mod:
+            raise core.ToolError(f"Mod {mid} is not in the local cache.")
+        vers = sorted({f["version"] for f in mod["files"] if f["kind"] == kind})
+        if not vers:
+            raise core.ToolError(f"No {kind} files for {mid}.")
+        if v2 is None:
+            v2 = vers[-1]
+        if v1 is None:
+            older = [v for v in vers if v < v2]
+            if not older:
+                raise core.ToolError(f"Only one cached {kind} version ({v2}) of {mid}; nothing to diff. "
+                                     f"Versions: {vers}. Use draft=true to compare with the draft.")
+            v1 = older[-1]
+        a = core.get_mod(cfg, mid, v1, kind, max_chars=core.MAX_READ_BYTES, source="cache")
+        b = core.get_mod(cfg, mid, v2, kind, max_chars=core.MAX_READ_BYTES, source="cache")
+    al, bl = a["code"].splitlines(), b["code"].splitlines()
+    diff = list(difflib.unified_diff(al, bl, fromfile=f"{a['source']}/{a['file']}", tofile=f"{b['source']}/{b['file']}",
+                                     n=context, lineterm=""))
     added = sum(1 for l in diff if l.startswith("+") and not l.startswith("+++"))
     removed = sum(1 for l in diff if l.startswith("-") and not l.startswith("---"))
     text = "\n".join(diff)
-    return {"mod": f"mod-{mid}", "kind": kind, "from_version": v1, "to_version": v2, "versions": vers,
+    return {"mod": f"mod-{mid}", "kind": kind, "from": f"{a['source']} v{a['version']}", "to": f"{b['source']} v{b['version']}",
+            "from_version": a["version"], "to_version": b["version"], "versions": vers,
             "identical": not diff, "added": added, "removed": removed,
             "truncated": len(text) > max_chars, "diff": text[:max_chars]}
 
@@ -218,88 +225,77 @@ def diff_mod(cfg: Config, mod_id: str, v1: int | None = None, v2: int | None = N
 # ---------------------------------------------------------------- 3. log errors
 
 def _parse_log_errors(lines: list[str]) -> list[dict[str, Any]]:
-    errors: list[dict[str, Any]] = []
-    active = {"gameplay": [], "visual": []}
-    i, n = 0, len(lines)
-    while i < n:
-        raw = lines[i]
-        m_ts = LOG_TS_RE.match(raw)
-        ts, body = (m_ts.group(1), m_ts.group(2)) if m_ts else (None, raw)
-        mu = USING_RE.search(body)
-        if mu:
-            active[mu.group(1)] = [f"{a}_{b}" for a, b in MOD_TOKEN_RE.findall(mu.group(2))]
-            i += 1
-            continue
-        mf = LUA_FAIL_RE.search(body)
-        if mf:
-            err = {"line_no": i + 1, "time": ts, "script": mf.group("script"), "status": mf.group("status"),
-                   "frames": [], "message": None, "chunk_preview": None, "chunk_line": None,
-                   "active_gameplay": list(active["gameplay"]), "active_visual": list(active["visual"])}
-            j = i + 1
-            while j < n and j <= i + 60:
-                l = lines[j]
-                if re.match(r"^\s*Error occur+ed at:?", l):
-                    j += 1
-                    continue
-                fm = FRAME_RE.match(l)
-                if fm:
-                    err["frames"].append({"line": int(fm.group(1)), "function": fm.group(2)})
-                    j += 1
-                    continue
-                if not l.strip():
-                    j += 1
-                    if err["message"]:
-                        break
-                    continue
-                if LOG_TS_RE.match(l) and err["message"] is None and not CHUNK_RE.search(l):
-                    break
-                cm = CHUNK_RE.search(l)
-                if cm:
-                    err["chunk_preview"] = cm.group("preview")
-                    err["chunk_line"] = int(cm.group("line"))
-                    err["message"] = cm.group("msg").strip()
-                else:
-                    err["message"] = l.strip()
-                j += 1
-                break
-            errors.append(err)
-            i = j
-            continue
-        cm = CHUNK_RE.search(body)
-        if cm:
-            errors.append({"line_no": i + 1, "time": ts, "script": None, "status": None, "frames": [],
-                           "message": cm.group("msg").strip(), "chunk_preview": cm.group("preview"),
-                           "chunk_line": int(cm.group("line")),
-                           "active_gameplay": list(active["gameplay"]), "active_visual": list(active["visual"])})
-        i += 1
-    return errors
+    return logparse.parse_lines(lines, warnings=False)
 
 
-def _map_chunk(cfg: Config, preview: str, line: int | None, active: list[str]) -> list[dict[str, Any]]:
-    """Find cached mod files whose text starts with the chunk preview."""
+def _excerpt(lines: list[str], line: int, radius: int = 3) -> str:
+    lo, hi = max(1, line - radius), min(len(lines), line + radius)
+    return "\n".join(f"{n:>5}{'>' if n == line else ':'} {lines[n - 1]}" for n in range(lo, hi + 1))
+
+
+def _source_hit(cfg: Config, f: dict[str, Any], mod_id: str, line: int | None, active: bool,
+                excerpt: bool = False) -> dict[str, Any]:
+    path = core.mod_file_path(cfg, f)
+    hit: dict[str, Any] = {"mod": f"mod-{mod_id}", "version": f["version"], "file": f["file"],
+                           "source": f["source"], "path": str(path), "active": active}
+    if line and line > 0:
+        code_lines = core._read_text(path).splitlines()
+        if line <= len(code_lines):
+            hit["line"] = line
+            hit["code"] = code_lines[line - 1].strip()[:200]
+            if excerpt:
+                hit["excerpt"] = _excerpt(code_lines, line)
+    return hit
+
+
+def _map_chunk(cfg: Config, preview: str, line: int | None, active: list[str],
+               excerpt: bool = False) -> list[dict[str, Any]]:
+    """Find cached mod files and drafts whose text starts with the chunk preview."""
     pv = preview.strip()
     if len(pv) < 8:
         return []
     out = []
-    mods = core.scan_mods(cfg)
-    active_ids = {a.split("_")[0]: int(a.split("_")[1]) for a in active}
-    for mod in mods.values():
-        for f in mod["files"]:
-            if f["kind"] != "lua":
-                continue
-            if active_ids and mod["id"] in active_ids and f["version"] != active_ids[mod["id"]]:
-                continue
-            head = core._read_text(cfg.mods_dir / f["file"], 4096).lstrip()
-            if head.startswith(pv):
-                hit = {"mod": f"mod-{mod['id']}", "version": f["version"], "file": f["file"],
-                       "active": mod["id"] in active_ids}
-                if line and line > 0:
-                    code_lines = core._read_text(cfg.mods_dir / f["file"]).splitlines()
-                    if line <= len(code_lines):
-                        hit["code"] = code_lines[line - 1].strip()[:200]
-                out.append(hit)
-    out.sort(key=lambda h: (not h["active"], h["mod"], -h["version"]))
+    active_ids: dict[tuple[str, str], int] = {}
+    for a in active:
+        src = "draft" if a.startswith("draft/") else "cache"
+        mid, ver = a.split("/")[-1].split("_")
+        active_ids[(src, mid)] = int(ver)
+    active_mods = {mid for _, mid in active_ids}
+    for mods in (core.scan_mods(cfg), core.scan_drafts(cfg)):
+        for mod in mods.values():
+            for f in mod["files"]:
+                if f["kind"] != "lua":
+                    continue
+                key = (f["source"], mod["id"])
+                if key in active_ids and f["version"] != active_ids[key]:
+                    continue
+                head = core._read_text(core.mod_file_path(cfg, f), 4096).lstrip()
+                if head.startswith(pv):
+                    out.append(_source_hit(cfg, f, mod["id"], line, key in active_ids or
+                                           (not active_ids and mod["id"] in active_mods), excerpt))
+    out.sort(key=lambda h: (not h["active"], h["source"] != "draft", h["mod"], -h["version"]))
     return out[:5]
+
+
+def resolve_source(cfg: Config, err: dict[str, Any], excerpt: bool = True) -> list[dict[str, Any]]:
+    """Source candidates for a parsed log error: explicit /modsStorage path first, then chunk preview."""
+    line = err.get("chunk_line")
+    if not line or line <= 0:
+        line = next((fr["line"] for fr in err.get("frames", []) if fr["line"] > 0), None)
+    ref = err.get("mod_file")
+    if ref:
+        mods = core.scan_drafts(cfg) if ref["source"] == "draft" else core.scan_mods(cfg)
+        mod = mods.get(ref["id"])
+        f = next((x for x in (mod or {}).get("files", []) if x["file"] == ref["file"]), None)
+        if f:
+            return [_source_hit(cfg, f, ref["id"], line, True, excerpt)]
+        return [{"mod": f"mod-{ref['id']}", "version": ref["version"], "file": ref["file"], "source": ref["source"],
+                 "missing": True}]
+    if err.get("chunk_preview"):
+        kind = "visual" if err.get("script") and re.search(r"/(visual|interfaces|Tools)/", err["script"]) else "gameplay"
+        active = err.get("active_visual" if kind == "visual" else "active_gameplay") or []
+        return _map_chunk(cfg, err["chunk_preview"], line, active, excerpt)
+    return []
 
 
 def log_errors(cfg: Config, which: str = "log.txt", tail: int | None = None, since: str | None = None,
@@ -324,7 +320,7 @@ def log_errors(cfg: Config, which: str = "log.txt", tail: int | None = None, sin
         errs = [e for e in errs if e["time"] and e["time"] >= since]
     groups: dict[tuple, dict[str, Any]] = {}
     for e in errs:
-        key = (e["script"], e["chunk_preview"], e["chunk_line"], re.sub(r"\d+", "N", e["message"] or ""))
+        key = (e["kind"], e["script"], e["chunk_preview"], e["chunk_line"], re.sub(r"\d+", "N", e["message"] or ""))
         g = groups.get(key)
         if not g:
             g = groups[key] = {**e, "count": 0, "first_time": e["time"], "first_line_no": e["line_no"]}
@@ -335,14 +331,15 @@ def log_errors(cfg: Config, which: str = "log.txt", tail: int | None = None, sin
         kind = "visual" if g["script"] and re.search(r"/(visual|interfaces|Tools)/", g["script"]) else "gameplay"
         active = g["active_visual"] if kind == "visual" else g["active_gameplay"]
         g["script_kind"] = kind if g["script"] else None
-        g["candidates"] = _map_chunk(cfg, g["chunk_preview"], g["chunk_line"], active) if g["chunk_preview"] else []
+        g["candidates"] = resolve_source(cfg, g, excerpt=False)
         g["active_mods"] = active
-        for k in ("active_gameplay", "active_visual", "time", "line_no"):
+        for k in ("active_gameplay", "active_visual", "time", "line_no", "mod_file"):
             g.pop(k, None)
         out.append(g)
     return {"found": True, "path": str(path), "total_lines": len(lines), "errors_total": len(errs),
             "groups": out[: max(1, min(int(limit), 200))], "truncated": len(out) > limit,
-            "note": "Mod mapping: 'candidates' match the [string \"...\"] chunk preview against cached mod files; "
+            "note": "Mod mapping: 'candidates' come from an explicit /modsStorage[/draft] path in the error or match "
+                    "the [string \"...\"] chunk preview against cached mod files and drafts; "
                     "'active_mods' are the mods loaded at that point per 'Using ... modifications'. "
                     "Times are as written in the log."}
 
