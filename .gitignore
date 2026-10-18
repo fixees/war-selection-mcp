@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+
+# Game data must never be committed
+modsStorage/
+Cache/
+gen/
+*.loc
+*.pack
+*.bin
+*.prm
+log*.txt
+engine-version.txt
+gameplay.json
+visual.json
+preload.json
+styles.json
+legacyIds.json
+main.json
+render.json
+ws-sample/
+samples/
+*.bak
