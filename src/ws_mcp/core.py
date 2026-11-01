@@ -135,9 +135,48 @@ def game_info(cfg: Config) -> dict[str, Any]:
         "log_found": logs,
         "api_index": _index_status(cfg, engine),
         "snapshots": _snapshot_status(cfg),
+        "asset_editor": _asset_editor_brief(cfg),
+        "asset_manifests": _asset_manifests_brief(cfg),
+        "map_drafts": _map_drafts_brief(cfg),
+        "console": {
+            "assignment": "=",
+            "dump_to_file_example": "session.gameplay.dumpToFile=dump.txt",
+            "confirmed_by": "Wouw (developer), Discord, 2026-10-18",
+        },
         "note": ("Bundled index is WSUS v258.4018. Refresh it from the running game: api_dump_script, "
-                 "then import_api_dump."),
+                 "then import_api_dump. F8 field writes use `=` (dump_to_file_plan)."),
     }
+
+
+def _asset_editor_brief(cfg: Config) -> dict[str, Any]:
+    from . import assets
+    try:
+        info = assets.asset_editor_info(cfg)
+    except OSError as e:
+        return {"present": False, "error": str(e)}
+    if not info.get("present"):
+        return {"present": False}
+    return {k: info[k] for k in ("present", "path", "version", "engine_version", "shaders", "mtime", "opens") if k in info}
+
+
+def _asset_manifests_brief(cfg: Config) -> dict[str, Any]:
+    from . import assets
+    d = assets.manifests_dir(cfg)
+    if not d.is_dir():
+        return {"present": False, "path": str(d)}
+    n = sum(1 for _ in d.glob("*.json"))
+    b = assets.blobs_dir(cfg)
+    return {"present": True, "path": str(d), "count": n,
+            "blobs_dir": str(b), "blobs_count": sum(1 for _ in b.glob("*")) if b.is_dir() else 0}
+
+
+def _map_drafts_brief(cfg: Config) -> dict[str, Any]:
+    from . import assets
+    d = assets.map_draft_dir(cfg)
+    if not d.is_dir():
+        return {"present": False, "path": str(d), "count": 0}
+    n = len({p.stem for p in d.glob("*.gemg")})
+    return {"present": True, "path": str(d), "count": n}
 
 
 def _snapshot_status(cfg: Config) -> dict[str, Any]:
@@ -502,6 +541,31 @@ def api_index_status(cfg: Config) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------- game version snapshots
+
+def asset_editor_info(cfg: Config) -> dict[str, Any]:
+    from . import assets
+    return assets.asset_editor_info(cfg)
+
+
+def list_asset_manifests(cfg: Config, query: str | None = None, limit: int = 100) -> dict[str, Any]:
+    from . import assets
+    return assets.list_asset_manifests(cfg, query, limit)
+
+
+def list_map_drafts(cfg: Config, parse: bool = True) -> dict[str, Any]:
+    from . import assets
+    return assets.list_map_drafts(cfg, parse)
+
+
+def dump_to_file_plan(cfg: Config, filename: str = "dump.txt", absolute: bool = True) -> dict[str, Any]:
+    from . import console
+    return console.dump_to_file_plan(cfg, filename, absolute)
+
+
+def inspect_console_dump(cfg: Config, file: str, max_chars: int = 4000) -> dict[str, Any]:
+    from . import console
+    return console.inspect_console_dump(cfg, file, max_chars)
+
 
 def snapshot_game(cfg: Config, force: bool = False, label: str | None = None) -> dict[str, Any]:
     from . import snapshots

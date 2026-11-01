@@ -119,6 +119,11 @@ python -m venv .venv
 | `watch_log_start` | `from_start`, `warnings` | Фоновое слежение за логом: ошибки и предупреждения Lua с привязкой к черновику или моду из кэша и фрагментом кода | чтение |
 | `watch_log_poll` | `since_seq`, `limit` | Новые события слежения | чтение |
 | `watch_log_stop` | | Остановить слежение | чтение |
+| `asset_editor_info` | | Установленный Asset Editor: версия, движок, шейдеры, что открывает | чтение |
+| `list_asset_manifests` | `query`, `limit` | Манифесты ассетов в `modsStorage/manifests` и счётчик `blobs` | чтение |
+| `list_map_drafts` | `parse` | Черновики карт `loadings/maps/draft/*.gemg|*.gemv` (GEM1), размер, фракции, моды | чтение |
+| `dump_to_file_plan` | `filename`, `absolute` | Точная строка F8 `session.gameplay.dumpToFile=<path>` (`=` подтверждён разработчиком 18.10.2026); формат файла неизвестен | чтение |
+| `inspect_console_dump` | `file`, `max_chars` | Просмотр файла после dumpToFile без импорта в индекс | чтение |
 | `write_draft` | `mod_id`, `code`, `version`, `extension` | Перезапись существующего черновика `modsStorage/draft/<id>_<версия>-<hash>.lua` с копией в `WS_MCP_DATA_DIR/draft-backups` | запись |
 
 `lint_mod` проверяет код статически. Неизвестные имена выдаются как предупреждения. Без живого индекса имена сверяются с WSUS 258.4018 и модами из кэша. После `import_api_dump` добавляется правило `absent-in-engine`: функция из WSUS 258, которой нет в выгрузке текущего движка.
@@ -130,6 +135,12 @@ python -m venv .venv
 3. Вызовите `import_api_dump`. Чтобы раскрыть ветки из `unexplored`, повторите шаги 1–3.
 
 Подробно, с форматом и списком проверенного и предположений: [docs/api-dump.md](docs/api-dump.md).
+
+### Asset Editor и карты
+
+- `asset_editor_info`, `list_asset_manifests`: редактор ассетов Steam и пакеты в `modsStorage/manifests`+`blobs`. Подробно: [docs/asset-editor.md](docs/asset-editor.md).
+- `list_map_drafts`: черновики карт редактора.
+- F8: `session.gameplay.dumpToFile=<path>` (`=`). План и осмотр файла: `dump_to_file_plan`, `inspect_console_dump`. Формат вывода пока неизвестен: [docs/console-dump.md](docs/console-dump.md).
 
 ### Черновики и кэш модов
 
@@ -254,6 +265,11 @@ Use the `mcpServers` JSON from the Russian section. `war-selection-mcp --print-c
 | `watch_log_start` | `from_start`, `warnings` | Background log watcher: Lua errors and warnings mapped to the draft or cached mod with a code excerpt | read |
 | `watch_log_poll` | `since_seq`, `limit` | New watcher events | read |
 | `watch_log_stop` | | Stop the watcher | read |
+| `asset_editor_info` | | Installed Asset Editor: version, engine, shaders, what it opens | read |
+| `list_asset_manifests` | `query`, `limit` | Asset pack manifests in `modsStorage/manifests` and `blobs` count | read |
+| `list_map_drafts` | `parse` | Map drafts in `loadings/maps/draft/*.gemg|*.gemv` (GEM1): size, factions, mods | read |
+| `dump_to_file_plan` | `filename`, `absolute` | Exact F8 line `session.gameplay.dumpToFile=<path>` (`=` confirmed by the developer 2026-10-18); file format unknown | read |
+| `inspect_console_dump` | `file`, `max_chars` | Inspect a dumpToFile output without importing it into the index | read |
 | `write_draft` | `mod_id`, `code`, `version`, `extension` | Overwrite an existing draft `modsStorage/draft/<id>_<version>-<hash>.lua`, backup in `WS_MCP_DATA_DIR/draft-backups` | write |
 
 `lint_mod` is static analysis. Unknown names are warnings. Without a live index, names are checked against WSUS 258.4018 and cached mods. After `import_api_dump` the `absent-in-engine` rule reports WSUS 258 functions that the current engine does not have.
@@ -265,6 +281,12 @@ Use the `mcpServers` JSON from the Russian section. `war-selection-mcp --print-c
 3. Call `import_api_dump`. Repeat steps 1-3 to expand the subtrees listed in `unexplored`.
 
 Details, record format, and what is verified versus assumed: [docs/api-dump.md](docs/api-dump.md).
+
+### Asset Editor and maps
+
+- `asset_editor_info`, `list_asset_manifests`: Steam Asset Editor and packs under `modsStorage/manifests`+`blobs`. Details: [docs/asset-editor.md](docs/asset-editor.md).
+- `list_map_drafts`: map editor drafts.
+- F8: `session.gameplay.dumpToFile=<path>` (`=`). Plan and inspect: `dump_to_file_plan`, `inspect_console_dump`. Output format still unknown: [docs/console-dump.md](docs/console-dump.md).
 
 ### Drafts and the mod cache
 

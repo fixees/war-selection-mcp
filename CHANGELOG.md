@@ -2,6 +2,24 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## 0.5.0 - 2026-11-01
+
+### Added
+
+- Stale `game_version` detection: if `gen/log.txt` is older than `engine-version.txt`, snapshots store `game_version: null`, `game_version_stale: true` and the old value as `game_version_raw`.
+- `engine_only_change` on snapshots when the engine file changed but Cache/Projects JSON hashes did not.
+- `asset_editor_info`: installed Asset Editor path, version stamp, engine, shader count, what it opens.
+- `list_asset_manifests`: `modsStorage/manifests` + `blobs` (asset packs; `asset-<code>_<ver>/...` unit paths).
+- `list_map_drafts`: `loadings/maps/draft/*.gemg|*.gemv`, zlib GEM1 parse of land size, factions, modsG/modsV.
+- `dump_to_file_plan` / `inspect_console_dump`: F8 line `session.gameplay.dumpToFile=<path>` (`=` assignment confirmed by the developer, 2026-10-18). Dump format marked unknown until a sample is captured.
+- `game_info` fields: `asset_editor`, `asset_manifests`, `map_drafts`, `console`.
+- `mod_impact` also matches renamed/removed unit path strings.
+- Docs: `docs/asset-editor.md`, `docs/console-dump.md`; snapshots doc updated for stale data and fixed-point balance units.
+
+### Changed
+
+- Snapshot manifests carry `data_hash`, stale flags and warnings. Diff output includes stale/engine-only flags.
+
 ## 0.4.0 - 2026-10-18
 
 ### Added

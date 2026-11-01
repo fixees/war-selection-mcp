@@ -10,7 +10,9 @@ EXPECTED = {"game_info", "list_mods", "get_mod", "search_mod_code", "game_data_q
             "search_api", "search_guide", "read_log", "write_draft", "api_dump_script", "import_api_dump",
             "api_index_status", "lint_mod", "diff_mod", "log_errors",
             "find_examples", "list_events_usage", "scaffold_mod", "unit_lookup", "snapshot_game",
-            "diff_game_versions", "mod_impact", "log_tail", "watch_log_start", "watch_log_poll", "watch_log_stop"}
+            "diff_game_versions", "mod_impact", "log_tail", "watch_log_start", "watch_log_poll", "watch_log_stop",
+            "asset_editor_info", "list_asset_manifests", "list_map_drafts", "dump_to_file_plan",
+            "inspect_console_dump"}
 
 
 def test_tools_registered():

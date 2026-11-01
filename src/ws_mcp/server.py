@@ -19,6 +19,8 @@ INSTRUCTIONS = (
     "('Edit script'); write_draft only overwrites an existing draft. The game folder is otherwise read-only; "
     "import_api_dump, snapshot_game and diff_game_versions write only to the per-user data folder. After a game "
     "update use diff_game_versions and mod_impact. While testing a mod use watch_log_start / watch_log_poll. "
+    "F8 field writes use `=` (dump_to_file_plan). Asset Editor and modsStorage/manifests are listed by "
+    "asset_editor_info / list_asset_manifests; map drafts by list_map_drafts. "
     "Never invent API names: check search_api first."
 )
 
@@ -189,6 +191,42 @@ def api_index_status() -> dict:
 
 
 WRITE_DATA = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
+
+
+@mcp.tool(annotations=RO)
+def asset_editor_info() -> dict:
+    """Installed Asset Editor under the game folder: version, engine, shaders, what it opens
+    (.pack, .geasset, model.json). Ships via Steam for models, materials, animations and effects."""
+    return _run(core.asset_editor_info, _cfg())
+
+
+@mcp.tool(annotations=RO)
+def list_asset_manifests(query: str | None = None, limit: int = 100) -> dict:
+    """Asset pack manifests in modsStorage/manifests (<code>_<ver>-<hash>.json) with file lists and
+    requires. Blobs live in modsStorage/blobs/<sha256>.pack. Unit paths asset-<code>_<ver>/... refer here."""
+    return _run(core.list_asset_manifests, _cfg(), query, limit)
+
+
+@mcp.tool(annotations=RO)
+def list_map_drafts(parse: bool = True) -> dict:
+    """Map editor drafts in loadings/maps/draft: <hex>_<ver>.gemg (gameplay) and .gemv (visual).
+    With parse=true, decompresses .gemg (zlib GEM1) and reports land size, factions and configured mods."""
+    return _run(core.list_map_drafts, _cfg(), parse)
+
+
+@mcp.tool(annotations=RO)
+def dump_to_file_plan(filename: str = "dump.txt", absolute: bool = True) -> dict:
+    """Exact F8 console line for session.gameplay.dumpToFile=<path> (assignment uses `=`, confirmed by
+    the developer 2026-10-18). Output format is unknown; after the file appears use inspect_console_dump.
+    Prefer absolute=true so the file lands under WS_MCP_DATA_DIR."""
+    return _run(core.dump_to_file_plan, _cfg(), filename, absolute)
+
+
+@mcp.tool(annotations=RO)
+def inspect_console_dump(file: str, max_chars: int = 4000) -> dict:
+    """Inspect a file produced by session.gameplay.dumpToFile=... . Reports size, a kind guess and the
+    head bytes/text. Does not import into the API index until the format is known."""
+    return _run(core.inspect_console_dump, _cfg(), file, max_chars)
 
 
 @mcp.tool(annotations=WRITE_DATA)

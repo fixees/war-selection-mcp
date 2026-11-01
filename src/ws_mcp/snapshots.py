@@ -58,7 +58,19 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _game_version(cfg: Config) -> str | None:
+def _game_version_info(cfg: Config) -> dict[str, Any]:
+    """Game Version from the log header, with staleness vs engine-version.txt.
+
+    The log is recreated only when the game runs. After a Steam update, engine-version.txt
+    and Cache/Projects JSON can refresh while gen/log.txt still holds the previous session's
+    Game Version line. That value must not be treated as current.
+    """
+    ev = cfg.game_dir / "engine-version.txt"
+    ev_mtime = ev.stat().st_mtime if ev.is_file() else None
+    info: dict[str, Any] = {"game_version": None, "game_version_stale": False, "log_path": None,
+                            "log_mtime": None, "engine_mtime": None}
+    if ev_mtime is not None:
+        info["engine_mtime"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ev_mtime))
     for name in ("log.txt", "log_prev.txt"):
         p = next((c for c in cfg.log_candidates(name) if c.is_file()), None)
         if not p:
@@ -66,9 +78,24 @@ def _game_version(cfg: Config) -> str | None:
         with open(p, "rb") as fh:
             head = fh.read(400_000).decode("utf-8", "replace")
         m = GAME_VERSION_RE.search(head)
-        if m:
-            return m.group(1)
-    return None
+        if not m:
+            continue
+        raw = m.group(1)
+        log_mtime = p.stat().st_mtime
+        info.update(log_path=str(p), log_mtime=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(log_mtime)),
+                    game_version_raw=raw)
+        # stale when the log is older than engine-version.txt (update installed, game not launched)
+        if ev_mtime is not None and log_mtime + 1 < ev_mtime:
+            info.update(game_version=None, game_version_stale=True,
+                        game_version_note=("Log predates engine-version.txt; Game Version line "
+                                           f"{raw!r} is from a previous session. Launch the game once."))
+        else:
+            info["game_version"] = raw
+        return info
+    if ev_mtime is not None:
+        info.update(game_version_stale=True,
+                    game_version_note="No Game Version line in log; launch the game once after the update.")
+    return info
 
 
 def current_state(cfg: Config) -> dict[str, Any]:
@@ -86,7 +113,15 @@ def current_state(cfg: Config) -> dict[str, Any]:
     if ev.is_file():
         files["<game>/engine-version.txt"] = {"size": ev.stat().st_size, "sha256": _sha256(ev)}
     combined = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
-    return {"engine_version": engine, "game_version": _game_version(cfg), "files": files, "content_hash": combined}
+    data_files = {k: v for k, v in files.items() if k != "<game>/engine-version.txt"}
+    data_hash = hashlib.sha256(json.dumps(data_files, sort_keys=True).encode()).hexdigest()
+    gv = _game_version_info(cfg)
+    return {"engine_version": engine, "game_version": gv["game_version"],
+            "game_version_stale": gv["game_version_stale"],
+            "game_version_raw": gv.get("game_version_raw"),
+            "game_version_note": gv.get("game_version_note"),
+            "log_mtime": gv.get("log_mtime"), "engine_mtime": gv.get("engine_mtime"),
+            "files": files, "content_hash": combined, "data_hash": data_hash}
 
 
 def list_snapshots(cfg: Config) -> list[dict[str, Any]]:
@@ -171,21 +206,45 @@ def snapshot_game(cfg: Config, api_entries: list[dict[str, Any]], api_label: str
             _write_gz(tmp / f"{name}.gz", data)
             stored.append(name)
         _write_gz(tmp / "api.json.gz", api)
-        manifest = {"format": SNAP_FORMAT, "id": sid, "seq": (last.get("seq", len(snaps)) if last else 0) + 1, "created": time.strftime("%Y-%m-%d %H:%M:%S"),
+        engine_only = bool(last and last.get("engine_version") != state["engine_version"]
+                            and last.get("data_hash", last["content_hash"]) == state["data_hash"])
+        manifest = {"format": SNAP_FORMAT, "id": sid, "seq": (last.get("seq", len(snaps)) if last else 0) + 1,
+                    "created": time.strftime("%Y-%m-%d %H:%M:%S"),
                     "engine_version": state["engine_version"], "game_version": state["game_version"],
-                    "content_hash": state["content_hash"], "api_hash": api_hash, "api_index": api_label,
-                    "api_entries": len(api), "files": state["files"], "stored": stored, "skipped": skipped}
+                    "game_version_stale": state.get("game_version_stale", False),
+                    "game_version_raw": state.get("game_version_raw"),
+                    "content_hash": state["content_hash"], "data_hash": state["data_hash"],
+                    "api_hash": api_hash, "api_index": api_label,
+                    "api_entries": len(api), "files": state["files"], "stored": stored, "skipped": skipped,
+                    "engine_only_change": engine_only,
+                    "warning": (("Engine version changed but Cache/Projects JSON hashes are unchanged vs the "
+                                 "previous snapshot. Launch the game once so it refreshes project data, then "
+                                 "snapshot again.") if engine_only else
+                                (("game_version from log is stale: " + (state.get("game_version_note") or ""))
+                                 if state.get("game_version_stale") else None))}
         (tmp / "manifest.json").write_text(json.dumps(manifest, indent=1, ensure_ascii=False), encoding="utf-8")
         os.replace(tmp, root / sid)
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
-    reason = "first snapshot" if not last else (
-        "engine version changed" if last.get("engine_version") != state["engine_version"] else
-        "game data changed" if last["content_hash"] != state["content_hash"] else
-        "API index changed" if last.get("api_hash") != api_hash else "forced")
+    if not last:
+        reason = "first snapshot"
+    elif last.get("engine_version") != state["engine_version"] and last.get("data_hash", last["content_hash"]) == state["data_hash"]:
+        reason = "engine version changed (game data files unchanged)"
+    elif last.get("engine_version") != state["engine_version"]:
+        reason = "engine version changed"
+    elif last["content_hash"] != state["content_hash"]:
+        reason = "game data changed"
+    elif last.get("api_hash") != api_hash:
+        reason = "API index changed"
+    else:
+        reason = "forced"
     return {"taken": True, "reason": reason, "snapshot": sid, "dir": str(root / sid),
             "engine_version": state["engine_version"], "game_version": state["game_version"],
+            "game_version_stale": state.get("game_version_stale", False),
+            "game_version_note": state.get("game_version_note"),
+            "engine_only_change": bool(last and last.get("engine_version") != state["engine_version"]
+                                       and last.get("data_hash", last["content_hash"]) == state["data_hash"]),
             "stored": stored, "skipped": skipped, "snapshots": len(snaps) + 1}
 
 
@@ -199,10 +258,15 @@ def snapshot_status(cfg: Config) -> dict[str, Any]:
         return {"snapshots": len(snaps), "state": f"error: {e}"}
     last = snaps[-1]
     same = last["content_hash"] == state["content_hash"]
-    return {"snapshots": len(snaps), "latest": last["id"], "latest_engine": last.get("engine_version"),
-            "state": "current" if same else "changed",
-            "detail": None if same else ("Game files differ from the latest snapshot; the next server start, "
-                                         "snapshot_game or diff_game_versions stores a new one.")}
+    out = {"snapshots": len(snaps), "latest": last["id"], "latest_engine": last.get("engine_version"),
+           "state": "current" if same else "changed",
+           "detail": None if same else ("Game files differ from the latest snapshot; the next server start, "
+                                        "snapshot_game or diff_game_versions stores a new one."),
+           "game_version": state.get("game_version"), "game_version_stale": state.get("game_version_stale"),
+           "game_version_note": state.get("game_version_note"),
+           "latest_engine_only_change": last.get("engine_only_change", False),
+           "latest_warning": last.get("warning")}
+    return out
 
 
 # ---------------------------------------------------------------- diff
@@ -380,7 +444,9 @@ def diff_versions(cfg: Config, a: str | None = None, b: str | None = None, limit
             generic[name] = out
     api = _api_diff(sa, sb, 100_000)
     full = {"a": sa["id"], "b": sb["id"], "engine": {"from": sa.get("engine_version"), "to": sb.get("engine_version")},
-            "game_version": {"from": sa.get("game_version"), "to": sb.get("game_version")}, "files": files,
+            "game_version": {"from": sa.get("game_version"), "to": sb.get("game_version")},
+            "game_version_stale": {"from": sa.get("game_version_stale"), "to": sb.get("game_version_stale")},
+            "engine_only_change": {"from": sa.get("engine_only_change"), "to": sb.get("engine_only_change")}, "files": files,
             "gameplay": sem, "other_json": generic, "api": api}
     full_path = None
     if write_full:

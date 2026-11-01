@@ -27,6 +27,11 @@ def mod_impact(cfg: Config, a: str | None = None, b: str | None = None, limit: i
     g, api = d["gameplay"], d["api"]
     units = {str(u["id"]): f"unit type {u['id']} removed ({u['unit']})" for u in g["units"]["removed"]}
     units |= {str(u["id"]): f"unit type {u['id']} renamed {u['old']} -> {u['new']}" for u in g["units"]["renamed"]}
+    path_strs: dict[str, str] = {}
+    for u in g["units"]["removed"]:
+        path_strs[u["unit"]] = f"unit path removed: {u['unit']} (id {u['id']})"
+    for u in g["units"]["renamed"]:
+        path_strs[u["old"]] = f"unit path renamed: {u['old']} -> {u['new']} (id {u['id']})"
     builds = {str(x["build_id"]): f"build rule {x['build_id']} {x['op']} ({x['unit']})" for x in g["build_rules"]}
     for x in g["build_rules"]:
         if x.get("unit_id") is not None and str(x["unit_id"]) not in units:
@@ -63,6 +68,8 @@ def mod_impact(cfg: Config, a: str | None = None, b: str | None = None, limit: i
                     reasons += [table[m] for m in rx.findall(line) if m in table]
             if funcs:
                 reasons += [funcs[n] for n in F_RE.findall(line) if n in funcs]
+            if path_strs:
+                reasons += [why for path, why in path_strs.items() if path in line]
             for rx, why in fields:
                 if rx.search(line):
                     reasons.append(why)
@@ -73,8 +80,9 @@ def mod_impact(cfg: Config, a: str | None = None, b: str | None = None, limit: i
                                  "file": f["file"], "line": i, "code": line.strip()[:200], "reason": why})
     mods = sorted({h["mod"] + (" (draft)" if h["source"] == "draft" else "") for h in hits})
     return {"a": d["a"], "b": d["b"], "engine": d["engine"], "files_scanned": len(files),
-            "checked": {"unit_ids": len(units), "build_ids": len(builds), "research_ids": len(researches),
-                        "upgrade_ids": len(upgrades), "api_functions": len(funcs), "api_fields": len(fields)},
+            "checked": {"unit_ids": len(units), "unit_paths": len(path_strs), "build_ids": len(builds),
+                        "research_ids": len(researches), "upgrade_ids": len(upgrades),
+                        "api_functions": len(funcs), "api_fields": len(fields)},
             "mods_affected": mods, "hits_total": sum(per_reason.values()), "hits": hits,
             "by_reason": dict(sorted(per_reason.items(), key=lambda x: -x[1])[:cap]),
             "note": ("Static text match on latest cached versions and drafts. Unit type ids are matched as "
