@@ -2,6 +2,25 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## 0.6.0 - 2026-11-01
+
+### Added
+
+- `list_mods_workspace` / `get_mods_workspace`: read `gen/modsWorkspace/<id>.json` plus `.operations` and `.sources` (engine 277 map-session mod mirror).
+- `inspect_console_dump` parses live `session_dump` files (map, mods including `draft/`, params, tagged players/devMode, zlib asset-path table).
+- Docs: `docs/mods-workspace.md`; `docs/console-dump.md` updated with the 2026-11-01 live sample.
+
+### Changed
+
+- `dump_to_file_plan` defaults to `absolute=false` (filename only). Absolute paths are rejected by engine 277 (`Invalid file name`); the file lands in the game root.
+- Confirmed (2026-11-01): private developer-mode match with owned draft `sFiuIHRk3Qh` starts on map `182404b1` (Wouw ModData fix); draft file `modsStorage/draft/<id>_<ver>-<hash>.lua|.prm`; log lists `draft/<id>_<ver>`.
+- `write_draft` path resolution re-verified against the real draft layout (dry-run only; no write). `lint_mod` / `get_mod` / `list_mods` see the draft; `log_errors` had no Lua errors for the empty draft (expected).
+
+### Notes
+
+- `dump.txt` is **not** useful for API indexing — keep `api_dump_script` / WSDUMP.
+- Game still loads drafts from `modsStorage/draft/...`; `modsWorkspace` is a parallel mirror.
+
 ## 0.5.0 - 2026-11-01
 
 ### Added

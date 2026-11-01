@@ -141,10 +141,13 @@ def game_info(cfg: Config) -> dict[str, Any]:
         "console": {
             "assignment": "=",
             "dump_to_file_example": "session.gameplay.dumpToFile=dump.txt",
+            "dump_path_rule": "filename only -> game root (absolute paths rejected; verified 2026-11-01)",
             "confirmed_by": "Wouw (developer), Discord, 2026-10-18",
         },
+        "mods_workspace": _mods_workspace_brief(cfg),
         "note": ("Bundled index is WSUS v258.4018. Refresh it from the running game: api_dump_script, "
-                 "then import_api_dump. F8 field writes use `=` (dump_to_file_plan)."),
+                 "then import_api_dump. F8 field writes use `=` (dump_to_file_plan); dumpToFile is "
+                 "filename-only and writes a session dump to the game root, not an API tree."),
     }
 
 
@@ -168,6 +171,17 @@ def _asset_manifests_brief(cfg: Config) -> dict[str, Any]:
     b = assets.blobs_dir(cfg)
     return {"present": True, "path": str(d), "count": n,
             "blobs_dir": str(b), "blobs_count": sum(1 for _ in b.glob("*")) if b.is_dir() else 0}
+
+
+
+def _mods_workspace_brief(cfg: Config) -> dict[str, Any]:
+    from . import workspace
+    d = workspace.workspace_dir(cfg)
+    if not d.is_dir():
+        return {"present": False, "path": str(d)}
+    files = list(workspace._list_workspace_files(d))
+    return {"present": True, "path": str(d), "count": len(files),
+            "ids": [p.stem for p in files[:10]]}
 
 
 def _map_drafts_brief(cfg: Config) -> dict[str, Any]:
@@ -557,7 +571,7 @@ def list_map_drafts(cfg: Config, parse: bool = True) -> dict[str, Any]:
     return assets.list_map_drafts(cfg, parse)
 
 
-def dump_to_file_plan(cfg: Config, filename: str = "dump.txt", absolute: bool = True) -> dict[str, Any]:
+def dump_to_file_plan(cfg: Config, filename: str = "dump.txt", absolute: bool = False) -> dict[str, Any]:
     from . import console
     return console.dump_to_file_plan(cfg, filename, absolute)
 
@@ -565,6 +579,19 @@ def dump_to_file_plan(cfg: Config, filename: str = "dump.txt", absolute: bool = 
 def inspect_console_dump(cfg: Config, file: str, max_chars: int = 4000) -> dict[str, Any]:
     from . import console
     return console.inspect_console_dump(cfg, file, max_chars)
+
+
+def list_mods_workspace(cfg: Config, workspace_id: str | None = None) -> dict[str, Any]:
+    from . import workspace
+    return workspace.list_mods_workspace(cfg, workspace_id)
+
+
+def get_mods_workspace(cfg: Config, workspace_id: str | None = None, mod_id: str | None = None,
+                       include_source: bool = False, max_source_chars: int = 60000,
+                       include_operations: bool = False, operations_limit: int = 50) -> dict[str, Any]:
+    from . import workspace
+    return workspace.get_mods_workspace(cfg, workspace_id, mod_id, include_source, max_source_chars,
+                                        include_operations, operations_limit)
 
 
 def snapshot_game(cfg: Config, force: bool = False, label: str | None = None) -> dict[str, Any]:

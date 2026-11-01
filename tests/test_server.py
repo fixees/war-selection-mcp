@@ -12,7 +12,7 @@ EXPECTED = {"game_info", "list_mods", "get_mod", "search_mod_code", "game_data_q
             "find_examples", "list_events_usage", "scaffold_mod", "unit_lookup", "snapshot_game",
             "diff_game_versions", "mod_impact", "log_tail", "watch_log_start", "watch_log_poll", "watch_log_stop",
             "asset_editor_info", "list_asset_manifests", "list_map_drafts", "dump_to_file_plan",
-            "inspect_console_dump"}
+            "inspect_console_dump", "list_mods_workspace", "get_mods_workspace"}
 
 
 def test_tools_registered():

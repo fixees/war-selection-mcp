@@ -30,4 +30,4 @@ New with the same update:
 
 `loadings/maps/draft/<hex>_<ver>.gemg` + `.gemv`.
 
-Verified: both are zlib-compressed **GEM1** archives (version byte 5). `.gemg` entries observed: `map.lnd` (JSON land size/passability), `map.trh` (binary terrain), `map.env`, `map.dat` (JSON factions), `map.cfg` (JSON `modsG` / `modsV`). `.gemv` is the visual twin; full schema beyond GEM1 is not documented. Tool: `list_map_drafts`.
+Verified: both are zlib-compressed **GEM1** archives (version byte 5). `.gemg` entries observed: `map.lnd` (JSON land size/passability), `map.trh` (binary terrain), `map.env`, `map.dat` (JSON factions), `map.cfg` (JSON `modsG` / `modsV`). `.gemv` is the visual twin; full schema beyond GEM1 is not documented. Tool: `list_map_drafts`. Live map `182404b1` drafts `_5` / `_6` observed 2026-11-01 (engine 277).

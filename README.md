@@ -123,7 +123,9 @@ python -m venv .venv
 | `list_asset_manifests` | `query`, `limit` | Манифесты ассетов в `modsStorage/manifests` и счётчик `blobs` | чтение |
 | `list_map_drafts` | `parse` | Черновики карт `loadings/maps/draft/*.gemg|*.gemv` (GEM1), размер, фракции, моды | чтение |
 | `dump_to_file_plan` | `filename`, `absolute` | Точная строка F8 `session.gameplay.dumpToFile=<path>` (`=` подтверждён разработчиком 18.10.2026); формат файла неизвестен | чтение |
-| `inspect_console_dump` | `file`, `max_chars` | Просмотр файла после dumpToFile без импорта в индекс | чтение |
+| `inspect_console_dump` | `file`, `max_chars` | Разбор session dump (имя файла → корень игры; не API-дерево) | чтение |
+| `list_mods_workspace` | `workspace_id` | Список `gen/modsWorkspace/<id>.json` (+ operations/sources) | чтение |
+| `get_mods_workspace` | `workspace_id`, `mod_id`, `include_source`, … | Чтение одного workspace / мода / operations | чтение |
 | `write_draft` | `mod_id`, `code`, `version`, `extension` | Перезапись существующего черновика `modsStorage/draft/<id>_<версия>-<hash>.lua` с копией в `WS_MCP_DATA_DIR/draft-backups` | запись |
 
 `lint_mod` проверяет код статически. Неизвестные имена выдаются как предупреждения. Без живого индекса имена сверяются с WSUS 258.4018 и модами из кэша. После `import_api_dump` добавляется правило `absent-in-engine`: функция из WSUS 258, которой нет в выгрузке текущего движка.
@@ -140,7 +142,7 @@ python -m venv .venv
 
 - `asset_editor_info`, `list_asset_manifests`: редактор ассетов Steam и пакеты в `modsStorage/manifests`+`blobs`. Подробно: [docs/asset-editor.md](docs/asset-editor.md).
 - `list_map_drafts`: черновики карт редактора.
-- F8: `session.gameplay.dumpToFile=<path>` (`=`). План и осмотр файла: `dump_to_file_plan`, `inspect_console_dump`. Формат вывода пока неизвестен: [docs/console-dump.md](docs/console-dump.md).
+- F8: `session.gameplay.dumpToFile=<имя>` (`=`; только имя файла → корень игры, проверено 01.11.2026). Session dump, не API: [docs/console-dump.md](docs/console-dump.md). Workspace карты: [docs/mods-workspace.md](docs/mods-workspace.md).
 
 ### Черновики и кэш модов
 
@@ -269,7 +271,9 @@ Use the `mcpServers` JSON from the Russian section. `war-selection-mcp --print-c
 | `list_asset_manifests` | `query`, `limit` | Asset pack manifests in `modsStorage/manifests` and `blobs` count | read |
 | `list_map_drafts` | `parse` | Map drafts in `loadings/maps/draft/*.gemg|*.gemv` (GEM1): size, factions, mods | read |
 | `dump_to_file_plan` | `filename`, `absolute` | Exact F8 line `session.gameplay.dumpToFile=<path>` (`=` confirmed by the developer 2026-10-18); file format unknown | read |
-| `inspect_console_dump` | `file`, `max_chars` | Inspect a dumpToFile output without importing it into the index | read |
+| `inspect_console_dump` | `file`, `max_chars` | Parse session dump (filename → game root; not an API tree) | read |
+| `list_mods_workspace` | `workspace_id` | List `gen/modsWorkspace/<id>.json` (+ operations/sources) | read |
+| `get_mods_workspace` | `workspace_id`, `mod_id`, `include_source`, … | Read one workspace / mod / operations | read |
 | `write_draft` | `mod_id`, `code`, `version`, `extension` | Overwrite an existing draft `modsStorage/draft/<id>_<version>-<hash>.lua`, backup in `WS_MCP_DATA_DIR/draft-backups` | write |
 
 `lint_mod` is static analysis. Unknown names are warnings. Without a live index, names are checked against WSUS 258.4018 and cached mods. After `import_api_dump` the `absent-in-engine` rule reports WSUS 258 functions that the current engine does not have.
@@ -286,7 +290,7 @@ Details, record format, and what is verified versus assumed: [docs/api-dump.md](
 
 - `asset_editor_info`, `list_asset_manifests`: Steam Asset Editor and packs under `modsStorage/manifests`+`blobs`. Details: [docs/asset-editor.md](docs/asset-editor.md).
 - `list_map_drafts`: map editor drafts.
-- F8: `session.gameplay.dumpToFile=<path>` (`=`). Plan and inspect: `dump_to_file_plan`, `inspect_console_dump`. Output format still unknown: [docs/console-dump.md](docs/console-dump.md).
+- F8: `session.gameplay.dumpToFile=<name>` (`=`; filename only → game root, verified 2026-11-01). Session dump, not an API tree: [docs/console-dump.md](docs/console-dump.md). Map workspace: [docs/mods-workspace.md](docs/mods-workspace.md).
 
 ### Drafts and the mod cache
 

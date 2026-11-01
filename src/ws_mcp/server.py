@@ -19,8 +19,10 @@ INSTRUCTIONS = (
     "('Edit script'); write_draft only overwrites an existing draft. The game folder is otherwise read-only; "
     "import_api_dump, snapshot_game and diff_game_versions write only to the per-user data folder. After a game "
     "update use diff_game_versions and mod_impact. While testing a mod use watch_log_start / watch_log_poll. "
-    "F8 field writes use `=` (dump_to_file_plan). Asset Editor and modsStorage/manifests are listed by "
-    "asset_editor_info / list_asset_manifests; map drafts by list_map_drafts. "
+    "F8 field writes use `=` (dump_to_file_plan: filename only, file lands in the game root as a "
+    "session dump — not an API tree). Asset Editor and modsStorage/manifests are listed by "
+    "asset_editor_info / list_asset_manifests; map drafts by list_map_drafts; gen/modsWorkspace by "
+    "list_mods_workspace / get_mods_workspace. "
     "Never invent API names: check search_api first."
 )
 
@@ -215,18 +217,38 @@ def list_map_drafts(parse: bool = True) -> dict:
 
 
 @mcp.tool(annotations=RO)
-def dump_to_file_plan(filename: str = "dump.txt", absolute: bool = True) -> dict:
-    """Exact F8 console line for session.gameplay.dumpToFile=<path> (assignment uses `=`, confirmed by
-    the developer 2026-10-18). Output format is unknown; after the file appears use inspect_console_dump.
-    Prefer absolute=true so the file lands under WS_MCP_DATA_DIR."""
+def dump_to_file_plan(filename: str = "dump.txt", absolute: bool = False) -> dict:
+    """Exact F8 console line for session.gameplay.dumpToFile=<filename> (assignment uses `=`, confirmed
+    2026-10-18). Engine 277 accepts a bare filename only (absolute paths -> `Invalid file name`); the file
+    appears in the game root as a binary session dump (not a Lua API tree). Default absolute=false."""
     return _run(core.dump_to_file_plan, _cfg(), filename, absolute)
 
 
 @mcp.tool(annotations=RO)
 def inspect_console_dump(file: str, max_chars: int = 4000) -> dict:
-    """Inspect a file produced by session.gameplay.dumpToFile=... . Reports size, a kind guess and the
-    head bytes/text. Does not import into the API index until the format is known."""
+    """Inspect a dumpToFile output. Bare names resolve under the game root. Parses session_dump layout
+    (map, mods including draft/, params, tagged players/devMode, zlib asset paths). Does not import into
+    the API index — session dumps are not WSDUMP."""
     return _run(core.inspect_console_dump, _cfg(), file, max_chars)
+
+
+@mcp.tool(annotations=RO)
+def list_mods_workspace(workspace_id: str | None = None) -> dict:
+    """List gen/modsWorkspace/<id>.json mirrors (engine 277+): identity, revision, attachment/mod counts,
+    .operations and .sources sidecars. Optional workspace_id. Read-only; drafts for write_draft remain
+    under modsStorage/draft."""
+    return _run(core.list_mods_workspace, _cfg(), workspace_id)
+
+
+@mcp.tool(annotations=RO)
+def get_mods_workspace(workspace_id: str | None = None, mod_id: str | None = None,
+                       include_source: bool = False, max_source_chars: int = 60000,
+                       include_operations: bool = False, operations_limit: int = 50) -> dict:
+    """Read one modsWorkspace JSON (latest by mtime if id omitted). Optional mod_id filter; include_source
+    returns inlined Lua; include_operations returns source-fetch op records. .sources/<code>.lua are
+    id-only copies — the game still loads drafts from modsStorage/draft."""
+    return _run(core.get_mods_workspace, _cfg(), workspace_id, mod_id, include_source, max_source_chars,
+                include_operations, operations_limit)
 
 
 @mcp.tool(annotations=WRITE_DATA)
