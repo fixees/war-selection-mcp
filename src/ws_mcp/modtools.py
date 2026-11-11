@@ -456,6 +456,23 @@ def unit_lookup(cfg: Config, query: str, limit: int = 20) -> dict[str, Any]:
     else:
         ql = q.lower()
         matches = sorted(((k, v) for k, v in units.items() if ql in v.lower()), key=lambda kv: int(kv[0]))
+    # Also match localized encyclopedia names (catalog has no stats; paths map back to legacyIds).
+    from . import encyclopedia
+    extra_paths = []
+    try:
+        extra_paths = encyclopedia.paths_matching_name(cfg, q)
+    except OSError:
+        extra_paths = []
+    path_to_id = {v: k for k, v in units.items()}
+    seen = {p for _, p in matches}
+    for path in extra_paths:
+        if path in seen:
+            continue
+        uid = path_to_id.get(path)
+        if uid is not None:
+            matches.append((uid, path))
+            seen.add(path)
+
     out = []
     for uid, path in matches[: max(1, min(int(limit), 200))]:
         rules = []
@@ -469,8 +486,16 @@ def unit_lookup(cfg: Config, query: str, limit: int = 20) -> dict[str, Any]:
                 if "health" in b:
                     r["health"] = b["health"]
                 rules.append(r)
-        out.append({"id": int(uid), "path": path, "build_rules": rules})
+        entry: dict[str, Any] = {"id": int(uid), "path": path, "build_rules": rules}
+        try:
+            meta = encyclopedia.entity_meta(cfg, path)
+        except OSError:
+            meta = None
+        if meta:
+            entry.update({k: meta[k] for k in ("name", "kind", "places") if meta.get(k) is not None})
+        out.append(entry)
     return {"query": q, "matches": out, "total": len(matches),
             "note": "id is the legacy unit id from legacyIds.json; in known examples it matches the "
                     "root.unitType index (201 worker, 285 Big Bertha). At runtime prefer "
-                    "root.unitType.f_find(path). Costs are x1000 (res0 food, res1 wood, res2 iron)."}
+                    "root.unitType.f_find(path). Costs are x1000 (res0 food, res1 wood, res2 iron). "
+                    "If the encyclopedia catalog is present, name/kind/places come from it; stats do not."}

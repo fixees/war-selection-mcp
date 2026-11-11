@@ -108,7 +108,9 @@ python -m venv .venv
 | `find_examples` | `api_name`, `limit`, `context`, `per_mod` | Реальные вызовы API в модах из кэша, с учётом локальных псевдонимов | чтение |
 | `list_events_usage` | `event` | Какие события `addMod` регистрирует каждый мод | чтение |
 | `scaffold_mod` | `template`, `params` | Заготовка мода из рецептов руководства с комментариями-источниками; без аргументов выводит список шаблонов. Код возвращается, на диск не пишется | чтение |
-| `unit_lookup` | `query`, `limit` | Типы юнитов по legacy id или пути (`legacyIds.json`) и правила постройки из `gameplay.json` | чтение |
+| `unit_lookup` | `query`, `limit` | Типы юнитов по legacy id, пути или имени энциклопедии; цены/HP из `gameplay.json` | чтение |
+| `encyclopedia_info` |  | Каталог энциклопедии (имена, страны, ростеры; не статы) | чтение |
+| `encyclopedia_lookup` | `query`, `lang`, `kind`, `limit` | Поиск по каталогу энциклопедии | чтение |
 | `api_dump_script` | `root`, `space`, `depth`, `max_nodes`, `array_sample`, `compact`, `seeds`, `raw`, `to_table`, `autorun` | Lua-скрипт для консоли F8 или мода: выгружает дерево `root` в `gen/log.txt` строками `WSDUMP` | чтение |
 | `import_api_dump` | `file`, `which`, `dump_id`, `space`, `allow_partial`, `reset`, `dry_run`, `limit` | Разбирает выгрузку из лога, строит живой индекс в папке данных пользователя, выдаёт diff с WSUS 258 (added/removed/changed) и список нераскрытых веток | запись (только `WS_MCP_DATA_DIR`) |
 | `api_index_status` | | Активный индекс, его версия движка, число записей, устарел ли он относительно `engine-version.txt` | чтение |
@@ -256,7 +258,9 @@ Use the `mcpServers` JSON from the Russian section. `war-selection-mcp --print-c
 | `find_examples` | `api_name`, `limit`, `context`, `per_mod` | Real API usages in cached mods, including local aliases | read |
 | `list_events_usage` | `event` | `addMod` events registered by each mod | read |
 | `scaffold_mod` | `template`, `params` | Starter code from guide recipes with source comments; lists templates when called without arguments. Returns code, writes nothing | read |
-| `unit_lookup` | `query`, `limit` | Unit types by legacy id or path (`legacyIds.json`) with build rules from `gameplay.json` | read |
+| `unit_lookup` | `query`, `limit` | Unit types by legacy id, path or encyclopedia name; costs/HP from `gameplay.json` | read |
+| `encyclopedia_info` |  | Encyclopedia catalog (names, countries, rosters; not stats) | read |
+| `encyclopedia_lookup` | `query`, `lang`, `kind`, `limit` | Search the encyclopedia catalog | read |
 | `api_dump_script` | `root`, `space`, `depth`, `max_nodes`, `array_sample`, `compact`, `seeds`, `raw`, `to_table`, `autorun` | Lua script for the F8 console or a mod; dumps the `root` tree into `gen/log.txt` as `WSDUMP` lines | read |
 | `import_api_dump` | `file`, `which`, `dump_id`, `space`, `allow_partial`, `reset`, `dry_run`, `limit` | Parses the dump from the log, builds the live index in the user data folder, reports the diff against WSUS 258 (added/removed/changed) and unexplored subtrees | write (`WS_MCP_DATA_DIR` only) |
 | `api_index_status` | | Active index, its engine version, entry counts, staleness against `engine-version.txt` | read |

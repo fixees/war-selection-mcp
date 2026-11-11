@@ -145,6 +145,8 @@ def game_info(cfg: Config) -> dict[str, Any]:
             "confirmed_by": "Wouw (developer), Discord, 2026-10-18",
         },
         "mods_workspace": _mods_workspace_brief(cfg),
+        "encyclopedia": _encyclopedia_brief(cfg),
+        "steam": _steam_brief(cfg),
         "note": ("Bundled index is WSUS v258.4018. Refresh it from the running game: api_dump_script, "
                  "then import_api_dump. F8 field writes use `=` (dump_to_file_plan); dumpToFile is "
                  "filename-only and writes a session dump to the game root, not an API tree."),
@@ -172,6 +174,27 @@ def _asset_manifests_brief(cfg: Config) -> dict[str, Any]:
     return {"present": True, "path": str(d), "count": n,
             "blobs_dir": str(b), "blobs_count": sum(1 for _ in b.glob("*")) if b.is_dir() else 0}
 
+
+
+
+def _encyclopedia_brief(cfg: Config) -> dict[str, Any]:
+    from . import encyclopedia
+    try:
+        info = encyclopedia.encyclopedia_info(cfg)
+    except OSError as e:
+        return {"present": False, "error": str(e)}
+    if not info.get("present"):
+        return {"present": False, "path": info.get("path")}
+    return {k: info[k] for k in ("present", "path", "catalog_version", "entities", "researches",
+                                 "countries", "kinds", "mtime") if k in info}
+
+
+def _steam_brief(cfg: Config) -> dict[str, Any]:
+    from . import steaminstall
+    try:
+        return steaminstall.steam_install_info(cfg)
+    except OSError as e:
+        return {"found": False, "error": str(e)}
 
 
 def _mods_workspace_brief(cfg: Config) -> dict[str, Any]:
@@ -592,6 +615,17 @@ def get_mods_workspace(cfg: Config, workspace_id: str | None = None, mod_id: str
     from . import workspace
     return workspace.get_mods_workspace(cfg, workspace_id, mod_id, include_source, max_source_chars,
                                         include_operations, operations_limit)
+
+
+def encyclopedia_info(cfg: Config) -> dict[str, Any]:
+    from . import encyclopedia
+    return encyclopedia.encyclopedia_info(cfg)
+
+
+def encyclopedia_lookup(cfg: Config, query: str, lang: str = "en", kind: str | None = None,
+                        limit: int = 20) -> dict[str, Any]:
+    from . import encyclopedia
+    return encyclopedia.encyclopedia_lookup(cfg, query, lang, kind, limit)
 
 
 def snapshot_game(cfg: Config, force: bool = False, label: str | None = None) -> dict[str, Any]:

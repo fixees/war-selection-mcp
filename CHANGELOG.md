@@ -2,6 +2,19 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## 0.7.0 - 2026-11-12
+
+### Added
+
+- `encyclopedia_info` / `encyclopedia_lookup`: read `Cache/Content/interfaces/WarSelection/encyclopedia` (catalog + `*.loc`). Names, icons, country/era rosters; not stats or prices.
+- `unit_lookup` also matches encyclopedia names and adds `name`, `kind`, `places` when the catalog is present.
+- `game_info.steam`: installed Steam `buildid` vs `TargetBuildID`, pending update, last updated/played.
+- Docs: `docs/encyclopedia.md`, `docs/mod-editor.md` (Edit script `fromBase62` overflow on engine 277, verified 2026-11-01).
+
+### Notes
+
+- A newer Steam depot was advertised but not installed on the checked PC (installed build 26319903 / engine 277; TargetBuildID 26589813, 0 bytes downloaded). `snapshot_game` reported unchanged vs `277-20261101-200447-eaa0b194`. No gameplay/legacyId/price/path diff. Asset Editor still `20261030-084719-bdd6`.
+
 ## 0.6.0 - 2026-11-01
 
 ### Added

@@ -22,7 +22,9 @@ INSTRUCTIONS = (
     "F8 field writes use `=` (dump_to_file_plan: filename only, file lands in the game root as a "
     "session dump — not an API tree). Asset Editor and modsStorage/manifests are listed by "
     "asset_editor_info / list_asset_manifests; map drafts by list_map_drafts; gen/modsWorkspace by "
-    "list_mods_workspace / get_mods_workspace. "
+    "list_mods_workspace / get_mods_workspace. Encyclopedia catalog (names, rosters; not stats) by "
+    "encyclopedia_info / encyclopedia_lookup; unit_lookup also uses it. game_info.steam reports a "
+    "pending Steam update when the installed buildid differs from TargetBuildID. "
     "Never invent API names: check search_api first."
 )
 
@@ -153,8 +155,9 @@ def scaffold_mod(template: str | None = None, params: dict | None = None) -> dic
 
 @mcp.tool(annotations=RO)
 def unit_lookup(query: str, limit: int = 20) -> dict:
-    """Find unit types by legacy id or asset path substring (legacyIds.json) with their build rules from
-    gameplay.json (cost, health). Example: 'worker', '201', 'airplane'."""
+    """Find unit types by legacy id, asset path substring, or encyclopedia name. Build rules (cost,
+    health) come from gameplay.json; localized name, kind and country/era places come from the
+    encyclopedia catalog when present. Example: 'worker', '201', 'airplane'."""
     return _run(modtools.unit_lookup, _cfg(), query, limit)
 
 
@@ -249,6 +252,22 @@ def get_mods_workspace(workspace_id: str | None = None, mod_id: str | None = Non
     id-only copies — the game still loads drafts from modsStorage/draft."""
     return _run(core.get_mods_workspace, _cfg(), workspace_id, mod_id, include_source, max_source_chars,
                 include_operations, operations_limit)
+
+
+@mcp.tool(annotations=RO)
+def encyclopedia_info() -> dict:
+    """In-game encyclopedia catalog under Cache/Content/interfaces/WarSelection/encyclopedia
+    (catalog.json + localization/*.loc). Counts of entities, researches, countries and eras.
+    The catalog has names, icons and rosters, not stats or prices (those stay in gameplay.json)."""
+    return _run(core.encyclopedia_info, _cfg())
+
+
+@mcp.tool(annotations=RO)
+def encyclopedia_lookup(query: str, lang: str = "en", kind: str | None = None, limit: int = 20) -> dict:
+    """Search the encyclopedia catalog by asset path, localized name, research id or country key.
+    lang is a two-letter code (en, ru, ...). kind: unit, building, research, country (optional).
+    Does not return combat stats or prices."""
+    return _run(core.encyclopedia_lookup, _cfg(), query, lang, kind, limit)
 
 
 @mcp.tool(annotations=WRITE_DATA)
